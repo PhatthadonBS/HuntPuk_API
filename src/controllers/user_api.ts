@@ -127,7 +127,7 @@ export const registerSec1 = async (req: Request, res: Response) => {
 
 //ยืนยันตัวตนผ่านแล้วส่ง objที่ได้จาก registersec1 and otpverify แล้วส่งข้อมูลมาพร้อมบัตรผ่าน
 export const registerSec2 = async (req: Request, res: Response) => {
-  const { userData, verify } = req.body;
+  const { userData, verify, admin } = req.body;
   const data: UserRegPostReq = {
     username: userData["username"],
     email: userData["email"],
@@ -135,11 +135,14 @@ export const registerSec2 = async (req: Request, res: Response) => {
     phone: userData["phone"],
   };
 
+  const regex = /^\$2b\$10\$.{20,}/;
+
+  if((!regex.test(data.password))) return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
   const verStatus = verify;
 
   const conn = await dbcon.getConnection();
   try {
-    if (verStatus) {
+    if (verStatus || admin) {
       conn.beginTransaction();
       const [rows] = await conn.execute<ResultSetHeader>(
         "INSERT INTO USERS (USERNAME, EMAIL, PASSWORD, PHONE_NUMBER) VALUES (?, ?, ?, ?)",

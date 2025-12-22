@@ -43,8 +43,8 @@ router.get('/user/members', userController.getMembers_api);//pass
 router.get('/user/dormOwners', userController.getDormOwners_api);//pass
 router.post('/user/dormOwner', upload.single("file"), userController.requestDormOwner_api);//pass
 router.put('/user/approve', userController.approveDormOwner);//pass
-router.post('/user/review', dormController.addReview_api);
-router.get('/user/dormOwnerReq', dormController.getPendingOwners_api);
+router.post('/user/review', dormController.addReview_api);//pass
+router.get('/user/dormOwnerReq', dormController.getPendingOwners_api);//pass
 
 
 // auth group
@@ -59,6 +59,13 @@ router.post('/other/mailSenter', userController.resMailSender_api);//pass
 router.post('/other/addFavorite', userController.addFavorite_api);//pass
 router.delete('/other/delFavorite', userController.removeFavorite_api);//pass
 
+// ✅ Dormitory group
+router.get('/dorms/pendingReq', dormController.getPendingDormReq_api);//pass
+router.get('/dorms/zones', dormController.getAllZones); 
+router.get('/dorms', dormController.getAllDorms);        
+router.get('/dorms/popular', dormController.getPopularDorms_api);//pass        
+router.post('/dorms', imgTypeUploads, dormController.createDorm_api);//pass
+router.post('/dorms/approve', dormController.approveDormReq_api);//pass
 
 //specific data group
 router.get('/spec/user/:id', userController.getUser_api)//pass
@@ -69,16 +76,11 @@ router.put('/spec/user/:id', userController.updateUser_api)//pass
 router.delete('/spec/delAccount/:id', userController.deleteAccount_api)//pass
 router.put('/spec/banAccount/:id', userController.banAccount_api)//pass
 router.put('/spec/dorm/:id', imgTypeUploads, dormController.updateDorm_api)//pass
-router.get('/spec/dorm/:id', dormController.getDormsByOwner_api)
-router.delete('/spec/review/:id', dormController.deleteReview_api)
-
-// ✅ Dormitory group (เพิ่มใหม่ตรงนี้)
-router.get('/dorms/zones', dormController.getAllZones); 
+router.get('/spec/dorm/:id', dormController.getDormsByOwner_api)//pass
+router.delete('/spec/review/:id', dormController.deleteReview_api)//pass
+router.get('/dorms/review/:id', dormController.getReviewsByDormId_api);//pass
 router.get('/dorms/:id', dormController.getDormById);   
-router.get('/dorms', dormController.getAllDorms);        
-router.get('/dorms/popular', dormController.getPopularDorms_api);        
-router.post('/dorms', imgTypeUploads, dormController.createDorm_api);
-router.get('/dorms/review/:id', dormController.getReviewsByDormId_api);
+
 
 
 export default router;

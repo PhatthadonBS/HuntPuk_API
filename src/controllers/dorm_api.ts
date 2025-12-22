@@ -4,7 +4,7 @@ import { dbcon } from "../database/pool";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { DormRegPostReq } from "../models/requests/dorm_reg_post_req";
 import { deleteFolder, deleteFromGCS, fileUpload } from "./uploads";
-import { getUsers_fn } from "./user_api";
+import { getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
 import { DormRoomImgTypeGetRes } from "../models/responses/dorm_roomImgType_get_res";
 import { DormRoomTypeReqPostReq } from "../models/requests/dorm_roomTypeReq_post_req";
@@ -870,7 +870,6 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
 
 export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
-    // รับค่า limit จาก query params (ถ้าไม่ส่งมา default = 6 หอ)
     const limit = req.query.limit ? Number(req.query.limit) : 6;
 
     const sql = `
@@ -882,11 +881,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
         d.FRONT_DORM_IMAGE as image, 
         d.VIEW_COUNT,
         dz.ZONE_NAME,
-        
-        -- หา "ราคาเริ่มต้น" (ต่ำสุด) ของหอนั้น
         COALESCE(MIN(rp.PRICE), 0) as start_price,
-
-        -- นับจำนวนคนที่กด Favorite หอนี้ (เพื่อโชว์ความฮอต)
         (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
 
       FROM DORMITORIES d
@@ -914,6 +909,122 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("Get Popular Dorms Error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+export const approveDormReq_api = async (req: Request, res: Response) => {
+  const { dorm_id, approve_status, msg } = req.body;
+  const conn = await dbcon.getConnection();
+
+  const data = {
+    dormId: Number(dorm_id),
+    status: approve_status == true ? 1 : 2, // 1 = accept (อนุมัติ), 2 = reject (ไม่อนุมัติ)
+    msg,
+  };
+
+  try {
+    await conn.beginTransaction();
+
+    const [dormInfo] = await conn.execute<RowDataPacket[]>(
+      `SELECT u.EMAIL, d.DORM_NAME 
+       FROM DORMITORIES d
+       JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+       JOIN USERS u ON do.USER_ID = u.USER_ID
+       WHERE d.DORM_ID = ?`,
+      [data.dormId]
+    );
+
+    if (dormInfo.length === 0) {
+      await conn.rollback();
+      return res.status(404).json("Dormitory not found");
+    }
+
+    const targetEmail = dormInfo[0]!.EMAIL;
+    const dormName = dormInfo[0]!.DORM_NAME;
+
+    const [result] = await conn.execute<ResultSetHeader>(
+      "UPDATE DORMITORIES SET REQ_STATUS = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
+      [data.status, data.dormId]
+    );
+
+    await conn.commit();
+
+    const subject = `แจ้งผลการพิจารณาลงทะเบียนหอพัก "${dormName}"`;
+    let content = "";
+    let info = false;
+
+    if (result.affectedRows > 0) {
+      if (!approve_status) {
+        content = `เรียน เจ้าของหอพัก\n\nขออภัย คำร้องขอลงทะเบียนหอพัก "${dormName}" ของท่าน ไม่ผ่านการพิจารณา\n\tเนื่องจาก: ${data.msg
+          .toString()
+          .trim()}\n\nกรุณาตรวจสอบข้อมูลและดำเนินการแก้ไขใหม่อีกครั้ง\nขอบคุณที่ใช้บริการของเรา`;
+        
+        info = await resMailSender_fn(targetEmail, subject, content);
+      
+      } else {
+        content = `เรียน เจ้าของหอพัก\n\nขอแสดงความยินดี! คำร้องขอลงทะเบียนหอพัก "${dormName}" ของท่าน ได้รับการอนุมัติเรียบร้อยแล้ว\n\tขณะนี้หอพักของท่านสามารถแสดงผลบนระบบและให้นักศึกษาเข้าดูได้ทันที\n\nขอบคุณที่ไว้วางใจและเลือกใช้บริการของเรา`;
+        
+        info = await resMailSender_fn(targetEmail, subject, content);
+      }
+    } else {
+      return res.status(400).json("Update failed (No affected rows)");
+    }
+
+    if (info) {
+      return res.status(200).json("sent mail Success");
+    } else {
+      return res.status(400).json("sent mail fail");
+    }
+
+  } catch (error) {
+    await conn.rollback();
+    console.error(error);
+    res.status(400).json(error);
+  } finally {
+    conn.release();
+  }
+};
+
+export const getPendingDormReq_api = async (req: Request, res: Response) => {
+  try {
+    const sql = `
+      SELECT 
+        d.DORM_ID,
+        d.DORM_NAME,
+        d.ADDRESS,
+        d.FRONT_DORM_IMAGE,
+        d.REG_AT,           
+        d.DORM_LICENSE,     
+        
+        dz.ZONE_NAME,
+        dt.DORM_TYPE_NAME,
+        
+        do.DORM_OWNER_ID,
+        do.FIRST_NAME,
+        do.LAST_NAME,
+        u.PHONE_NUMBER,
+        u.EMAIL
+
+      FROM DORMITORIES d
+      JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+      JOIN USERS u ON do.USER_ID = u.USER_ID
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
+      
+      WHERE d.REQ_STATUS = 0  
+      ORDER BY d.REG_AT ASC   
+    `;
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
+    console.log(dorms);
+    
+    res.json({
+      data: dorms
+    });
+
+  } catch (error: any) {
+    console.error("Get Pending Dorm Req Error:", error);
     res.status(500).json({ success: false, message: "Server Error", error: error.message });
   }
 };
