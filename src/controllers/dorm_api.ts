@@ -837,21 +837,17 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
 export const getPendingOwners_api = async (req: Request, res: Response) => {
   try {
     const sql = `
-      SELECT 
-        do.DORM_OWNER_ID,
-        do.USER_ID,
-        do.FIRST_NAME,
-        do.LAST_NAME,
-        do.PROFILE_IMAGE,
-        do.REQ_STATUS,
-        do.FACEBOOK,
-        do.LINE,
+        SELECT 
+        do.*,
         u.USERNAME,
         u.EMAIL,
-        u.PHONE_NUMBER
+        u.PHONE_NUMBER,
+        u.ACCOUNT_STATUS,
+        u.ROLE_TYPE_ID
+
       FROM DORM_OWNERS do
       JOIN USERS u ON do.USER_ID = u.USER_ID
-      WHERE do.REQ_STATUS = 0
+      WHERE do.REQ_STATUS = 0;
     `;
 
     const [owners] = await dbcon.query<RowDataPacket[]>(sql);
