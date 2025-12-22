@@ -1,0 +1,44 @@
+{
+  "name": "projects_api",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "nm": "npx nodemon src/server.ts"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/dotenv": "^6.1.1",
+    "@types/express": "^5.0.3",
+    "@types/mysql": "^2.15.27",
+    "@types/node": "^24.3.0",
+    "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.14.4",
+    "nodemailer": "^7.0.11",
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/multer": "^2.0.0",
+    "@types/nodemailer": "^7.0.4",
+    "@types/nodemon": "^1.19.6",
+    "nodemon": "^3.1.10",
+    "prisma": "^7.1.0",
+    "ts-node-dev": "^2.0.0"
+  }
+}

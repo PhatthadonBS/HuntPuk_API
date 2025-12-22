@@ -1,0 +1,17 @@
+# dependencies
+node_modules
+
+# production build
+dist
+
+# environment variables
+# .env
+
+# misc
+*.log
+
+.env
+*.sql
+service-account-key.json
+src/controllers/testApi.ts
+testApi.ts

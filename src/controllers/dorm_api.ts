@@ -1,0 +1,919 @@
+// controllers/dorm_api.ts
+import { Request, Response } from "express";
+import { dbcon } from "../database/pool";
+import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { DormRegPostReq } from "../models/requests/dorm_reg_post_req";
+import { deleteFolder, deleteFromGCS, fileUpload } from "./uploads";
+import { getUsers_fn } from "./user_api";
+import { PoolConnection } from "mysql2/promise";
+import { DormRoomImgTypeGetRes } from "../models/responses/dorm_roomImgType_get_res";
+import { DormRoomTypeReqPostReq } from "../models/requests/dorm_roomTypeReq_post_req";
+import { RoomTypeItem } from "../models/requests/RoomTypeItem";
+
+export type MulterFiles = {
+  [fieldname: string]: Express.Multer.File[];
+};
+// --- 1. ค้นหาและกรองหอพักทั้งหมด (Search + Zone + Price) ---
+export const getAllDorms = async (req: Request, res: Response) => {
+  try {
+    // ✅ รับค่า Filter ทั้งหมดจาก Query Params
+    const { search, zone, minPrice, maxPrice } = req.query;
+
+    let sql = `
+            SELECT 
+                d.DORM_ID, 
+                d.DORM_NAME, 
+                d.ADDRESS,
+                d.SCORE,
+                d.FRONT_DORM_IMAGE as image, 
+                dz.ZONE_NAME as zone,
+                ST_X(d.COORDINATES) as lat, 
+                ST_Y(d.COORDINATES) as lng,
+                MIN(rp.PRICE) as start_price
+            FROM DORMITORIES d
+            LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+            LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+            WHERE d.DORM_STATUS_ID = 1
+        `;
+
+    const params: any[] = [];
+
+    // 1.1 กรองด้วยคำค้นหา (ชื่อหอ หรือ ชื่อโซน)
+    if (search) {
+      sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    // 1.2 ✅ กรองด้วยโซน (จาก Dropdown)
+    if (zone) {
+      sql += ` AND dz.ZONE_NAME = ? `;
+      params.push(zone);
+    }
+
+    sql += ` GROUP BY d.DORM_ID `;
+
+    // 1.3 ✅ กรองราคา (ต้องใช้ HAVING เพราะ start_price มาจาก Aggregate Function)
+    const havingClauses = [];
+    if (minPrice) {
+      havingClauses.push(`start_price >= ?`);
+      params.push(Number(minPrice));
+    }
+    if (maxPrice) {
+      havingClauses.push(`start_price <= ?`);
+      params.push(Number(maxPrice));
+    }
+
+    if (havingClauses.length > 0) {
+      sql += ` HAVING ` + havingClauses.join(" AND ");
+    }
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
+    res.json({ success: true, data: dorms });
+  } catch (error) {
+    console.error("Error in getAllDorms:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// --- 2. ดูรายละเอียดหอพัก 1 แห่ง (แก้ไข JOIN USERS เพื่อเอาเบอร์โทร) ---
+export const getDormById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  console.log(`[API] Requesting Dorm ID: ${id}`);
+
+  try {
+    // ✅ แก้ไข SQL: JOIN ตาราง USERS เพื่อดึง PHONE_NUMBER
+    const sqlMain = `
+            SELECT 
+                d.*, 
+                ST_X(d.COORDINATES) as lat, 
+                ST_Y(d.COORDINATES) as lng,
+                dz.ZONE_NAME,
+                do.FIRST_NAME, 
+                do.LAST_NAME, 
+                do.LINE as OWNER_LINE,
+                u.PHONE_NUMBER as OWNER_PHONE  -- ดึงเบอร์จากตาราง USERS
+            FROM DORMITORIES d
+            LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+            LEFT JOIN USERS u ON do.USER_ID = u.USER_ID  -- ✅ เพิ่ม JOIN นี้
+            LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+            WHERE d.DORM_ID = ?
+        `;
+
+    const [dormInfo] = await dbcon.query<RowDataPacket[]>(sqlMain, [id]);
+
+    if (dormInfo.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "ไม่พบข้อมูลหอพัก" });
+    }
+
+    const mainData = dormInfo[0] as RowDataPacket;
+
+    // 2.2 ดึงรูปภาพแกลลอรี่
+    const [images] = await dbcon.query<RowDataPacket[]>(
+      "SELECT IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
+      [id]
+    );
+
+    // 2.3 ดึงสิ่งอำนวยความสะดวก
+    const [facilitiesData] = await dbcon.query<RowDataPacket[]>(
+      `
+            SELECT ft.FAC_TYPE_NAME 
+            FROM FACILITIES_DORMS fd
+            JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID
+            WHERE fd.DORM_ID = ?
+        `,
+      [id]
+    );
+
+    const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
+
+    // 2.4 ดึงข้อมูลห้องพักและราคา
+    const [rooms] = await dbcon.query<RowDataPacket[]>(
+      `
+            SELECT rt.ROOM_TYPE_NAME, rp.PRICE
+            FROM ROOM_TYPES rt
+            JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+            WHERE rt.DORM_ID = ?
+        `,
+      [id]
+    );
+
+    // หาราคาต่ำสุด
+    const minPrice =
+      rooms.length > 0
+        ? Math.min(...rooms.map((r: any) => r.PRICE))
+        : mainData.start_price || 0;
+
+    // ✅ สร้าง Object ตอบกลับ
+    const responseData = {
+      ...mainData,
+
+      DORM_NAME: mainData.DORM_NAME,
+      image: mainData.FRONT_DORM_IMAGE,
+      address: mainData.ADDRESS,
+      start_price: minPrice,
+
+      // ใช้ค่าที่ดึงมาจาก JOIN
+      phone: mainData.OWNER_PHONE || "-",
+      line: mainData.OWNER_LINE || "-",
+
+      facilities: facilitiesList,
+      gallery: images.map((img: any) => img.IMAGE_PATH),
+      rooms: rooms,
+    };
+
+    res.json({
+      success: true,
+      data: responseData,
+    });
+  } catch (error: any) {
+    console.error("!!! Error in getDormById !!!", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error: " + error.message });
+  }
+};
+
+export const getAllZones = async (req: Request, res: Response) => {
+  try {
+    const sql = `SELECT * FROM DORM_ZONES ORDER BY ZONE_ID ASC`;
+    const [zones] = await dbcon.query<RowDataPacket[]>(sql);
+    res.json({ success: true, data: zones });
+  } catch (error) {
+    console.error("Error in getAllZones:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+export const addFacility_api = async (req: Request, res: Response) => {
+  const { fac_name, uid } = req.body;
+  const file = req.file;
+  const conn = await dbcon.getConnection();
+  const icon_url = null;
+  if (!file || fac_name || uid) return res.status(400).json("not enough data");
+
+  try {
+    const user = await (await getUsers_fn()).filter((u) => u.USER_ID == uid);
+    if (user.length < 1) return res.status(404).json("user notfound");
+
+    const [limitAdd] = await conn.execute<RowDataPacket[]>(
+      "SELECT COUNT(ADD_BY) count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
+      [uid]
+    );
+    if (limitAdd[0]!["count"] >= 3)
+      return res.status(200).json("u have limit for add facility");
+
+    const [dupFac] = await conn.execute<RowDataPacket[]>(
+      "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
+      [fac_name]
+    );
+    if (dupFac[0]!["count"] > 0)
+      return res.status(200).json("duplicate facility name");
+
+    conn.beginTransaction();
+    conn.commit();
+  } catch (error) {
+    conn.rollback();
+    res.status(400).json(error);
+  } finally {
+    conn.release();
+  }
+};
+
+
+export const createDorm_api = async (req: Request, res: Response) => {
+
+    const {
+        owner_id, name, address, lat, lng, zone_id, type_id,
+        water_unit, water_lump, elect_unit, detail,
+        facilities, roomTypes
+    } = req.body;
+
+    const files = req.files as MulterFiles;
+    
+    let facilitiesArr: number[] = [];
+    let roomTypesArr: DormRoomTypeReqPostReq[] = [];
+    try {
+        facilitiesArr = JSON.parse(facilities || "[]");
+        roomTypesArr = JSON.parse(roomTypes || "[]");
+    } catch (e) {
+        return res.status(400).json({ success: false, message: "Invalid JSON format for facilities or roomTypes" });
+    }
+
+    const conn = await dbcon.getConnection();
+
+    try {
+        await conn.beginTransaction();
+
+        const mainImgTasks = [];
+        if (files["FRONT_DORM_IMG"]?.[0]) {
+            mainImgTasks.push(fileUpload(files["FRONT_DORM_IMG"][0], "dorms", name, null, "FRONT_DORM_IMG").then(url => ({ key: 'FRONT_DORM_IMG', url })));
+        }
+        if (files["LICENSE_IMG"]?.[0]) {
+            mainImgTasks.push(fileUpload(files["LICENSE_IMG"][0], "dorms", name, null, "LICENSE_IMG").then(url => ({ key: 'LICENSE_IMG', url })));
+        }
+
+        const mainImgs = await Promise.all(mainImgTasks);
+        const frontUrl = mainImgs.find(x => x.key === 'FRONT_DORM_IMG')?.url || "";
+        const licenseUrl = mainImgs.find(x => x.key === 'LICENSE_IMG')?.url || "";
+
+        const sqlDorm = `
+            INSERT INTO DORMITORIES 
+            (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
+             WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA)
+            VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const pointStr = `POINT(${lat} ${lng})`;
+
+        const [dormResult] = await conn.execute<ResultSetHeader>(sqlDorm, [
+            owner_id, name, address, pointStr, zone_id, type_id,
+            water_unit, water_lump, elect_unit, frontUrl, licenseUrl, detail
+        ]);
+        const dormId = dormResult.insertId;
+
+        if (facilitiesArr.length > 0) {
+            const facValues = facilitiesArr.map(facId => [dormId, facId]);
+            for (const facId of facilitiesArr) {
+                await conn.execute(
+                    `INSERT IGNORE INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID) VALUES (?, ?)`,
+                    [dormId, facId]
+                );
+            }
+        }
+
+
+        if (files["OTHER_IMG"] && files["OTHER_IMG"].length > 0) {
+            const otherTasks = files["OTHER_IMG"].map((file, idx) => 
+                fileUpload(file, "dorms", name, "other_img", `other_${idx}`)
+            );
+            const otherUrls = await Promise.all(otherTasks);
+            
+            for (const url of otherUrls) {
+                await conn.execute(
+                    `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
+                    [dormId, url]
+                );
+            }
+        }
+
+        const roomImgFieldMap: Record<string, number> = {
+            "CEILING_IMG": 1, 
+            "WALL_IMG": 2, 
+            "FLOOR_IMG": 3, 
+            "BED_IMG": 4,    
+            "BATHROOM_IMG": 5,
+            "BALCONY_IMG": 6
+        };
+
+        const roomUploadTasks = [];
+
+        for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
+            if (files[field]?.[0]) {
+                roomUploadTasks.push(
+                    fileUpload(files[field][0], "dorms", name, "room_img", field)
+                    .then(url => ({ typeId, url }))
+                );
+            }
+        }
+        const uploadedRoomImgs = await Promise.all(roomUploadTasks);
+
+ 
+        const getBedId = async (name: string): Promise<number> => {
+            const n = name.toLowerCase();
+            if (n.includes("single")) return 1; 
+            if (n.includes("double")) return 2; 
+            return 1; 
+        };
+
+        for (const room of roomTypesArr) {
+            const [rtResult] = await conn.execute<ResultSetHeader>(
+                `INSERT INTO ROOM_TYPES (DORM_ID, ROOM_TYPE_NAME) VALUES (?, ?)`,
+                [dormId, room.roomType] 
+            );
+            const rtId = rtResult.insertId;
+
+            if (room.perMonth) {
+                await conn.execute(
+                    `INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+                    [rtId, 1, room.perMonth] 
+                );
+            }
+            if (room.perTerm) {
+                await conn.execute(
+                    `INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+                    [rtId, 2, room.perTerm] 
+                );
+            }
+
+            const bedTypeId = await getBedId(room.bedType);
+            await conn.execute(
+                `INSERT INTO ROOM_BEDS (ROOM_TYPE_ID, BED_TYPE_ID) VALUES (?, ?)`,
+                [rtId, bedTypeId]
+            );
+
+        }
+        
+        for (const img of uploadedRoomImgs) {
+            await conn.execute(
+                 `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
+                [dormId, img.url]
+            );
+        }
+        await conn.commit();
+        res.status(201).json({ success: true, message: "Dormitory created successfully", dormId });
+
+    } catch (error: any) {
+        console.error("Transaction Error:", error);
+        await conn.rollback();
+
+        res.status(500).json({ success: false, message: "Failed to create dormitory", error: error.message });
+    } finally {
+        conn.release();
+    }
+};
+
+
+
+export const updateDorm_api = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const dormId = Number(id);
+  const body = req.body;
+  const files = req.files as MulterFiles;
+
+  const conn = await dbcon.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+
+    await updateDormInfo_fn(dormId, body, files, conn);
+
+
+    if (body.facilities) {
+      await updateFacilities_fn(dormId, body.facilities, conn);
+    }
+
+    if (body.roomTypes) {
+      await updateRoomTypes_fn(dormId, body.roomTypes, conn);
+    }
+
+    await updateRoomComponentImages_fn(dormId, body.name, files, conn);
+
+    await updateGalleryImages_fn(dormId, body.name, files, conn);
+
+    await conn.commit();
+    res.json({ success: true, message: "Dormitory updated successfully" });
+
+  } catch (error: any) {
+    await conn.rollback();
+    console.error("Update Error:", error);
+    res.status(500).json({ success: false, message: "Update failed", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const updateDormInfo_fn = async (
+  dormId: number,
+  data: any,
+  files: MulterFiles,
+  conn: PoolConnection
+) => {
+  let sql = "UPDATE DORMITORIES SET UPDATE_AT = CURRENT_DATE()";
+  const params: any[] = [];
+  const [oldData] = await conn.execute<RowDataPacket[]>(
+    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?",
+    [dormId]
+  );
+  if (data.name) { sql += ", DORM_NAME = ?"; params.push(data.name); }
+  if (data.address) { sql += ", ADDRESS = ?"; params.push(data.address); }
+  if (data.lat && data.lng) { sql += ", COORDINATES = ST_GeomFromText(?)"; params.push(`POINT(${data.lat} ${data.lng})`); }
+  if (data.zone_id) { sql += ", ZONE_ID = ?"; params.push(data.zone_id); }
+  if (data.type_id) { sql += ", DORM_TYPE_ID = ?"; params.push(data.type_id); }
+  if (data.water_unit) { sql += ", WATER_UNIT = ?"; params.push(data.water_unit); }
+  if (data.water_lump) { sql += ", WATER_LUMP = ?"; params.push(data.water_lump); }
+  if (data.elect_unit) { sql += ", ELECT_UNIT = ?"; params.push(data.elect_unit); }
+  if (data.detail) { sql += ", ADD_DORM_DATA = ?"; params.push(data.detail); }
+
+  if (files["FRONT_DORM_IMG"]?.[0]) {
+    if (oldData[0]?.FRONT_DORM_IMAGE) await deleteFromGCS(oldData[0].FRONT_DORM_IMAGE);
+    const url = await fileUpload(files["FRONT_DORM_IMG"][0], "dorms", data.name, null, "FRONT_DORM_IMG");
+    sql += ", FRONT_DORM_IMAGE = ?";
+    params.push(url);
+  }
+
+  if (files["LICENSE_IMG"]?.[0]) {
+    if (oldData[0]?.DORM_LICENSE) await deleteFromGCS(oldData[0].DORM_LICENSE);
+    const url = await fileUpload(files["LICENSE_IMG"][0], "dorms", data.name, null, "FRONT_DORM_IMG");
+    sql += ", DORM_LICENSE = ?";
+    params.push(url);
+  }
+
+  sql += " WHERE DORM_ID = ?";
+  params.push(dormId);
+
+  await conn.execute(sql, params);
+};
+
+
+export const updateFacilities_fn = async (
+  dormId: number,
+  facilitiesJson: string,
+  conn: PoolConnection
+) => {
+  let facilitiesArr: number[] = [];
+  try {
+    facilitiesArr = JSON.parse(facilitiesJson);
+  } catch (e) { return; } 
+
+  if (facilitiesArr.length >= 0) {
+    await conn.execute("DELETE FROM FACILITIES_DORMS WHERE DORM_ID = ?", [dormId]);
+    for (const facId of facilitiesArr) {
+      await conn.execute(
+        "INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID) VALUES (?, ?)",
+        [dormId, facId]
+      );
+    }
+  }
+};
+
+export const updateRoomTypes_fn = async (
+  dormId: number,
+  roomTypesJson: string,
+  conn: PoolConnection
+) => {
+
+
+  const getBedId = (name: string): number => {
+    const n = name.toString().toLowerCase();
+    if (n.includes("single") || n === "1") return 1;
+    if (n.includes("double") || n === "2") return 2;
+    return 1; 
+  };
+
+  let roomTypes: RoomTypeItem[] = [];
+  try { roomTypes = JSON.parse(roomTypesJson); } catch (e) { return; }
+
+  const [existingRooms] = await conn.execute<RowDataPacket[]>(
+    "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE DORM_ID = ?", [dormId]
+  );
+  const existingIds = existingRooms.map((r: any) => r.ROOM_TYPE_ID);
+
+  const incomingIds = roomTypes.filter(r => r.roomTypeId).map(r => Number(r.roomTypeId));
+  const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
+
+  if (idsToDelete.length > 0) {
+    const placeholders = idsToDelete.map(() => '?').join(',');
+    await conn.execute(`DELETE FROM ROOM_PRICES WHERE ROOM_TYPE_ID IN (${placeholders})`, idsToDelete);
+    await conn.execute(`DELETE FROM ROOM_BEDS WHERE ROOM_TYPE_ID IN (${placeholders})`, idsToDelete);
+    await conn.execute(`DELETE FROM ROOM_TYPES WHERE ROOM_TYPE_ID IN (${placeholders})`, idsToDelete);
+  }
+
+  for (const room of roomTypes) {
+    let currentId = Number(room.roomTypeId) || 0;
+
+    if (currentId > 0 && existingIds.includes(currentId)) {
+      await conn.execute("UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?", [room.roomType, currentId]);
+      
+      await conn.execute("DELETE FROM ROOM_PRICES WHERE ROOM_TYPE_ID = ?", [currentId]);
+      if (room.perMonth) await conn.execute("INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)", [currentId, room.perMonth]);
+      if (room.perTerm) await conn.execute("INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)", [currentId, room.perTerm]);
+      
+      await conn.execute("DELETE FROM ROOM_BEDS WHERE ROOM_TYPE_ID = ?", [currentId]);
+      await conn.execute("INSERT INTO ROOM_BEDS (ROOM_TYPE_ID, BED_TYPE_ID) VALUES (?, ?)", [currentId, getBedId(room.bedType)]);
+
+    } else {
+      const [res] = await conn.execute<any>("INSERT INTO ROOM_TYPES (DORM_ID, ROOM_TYPE_NAME) VALUES (?, ?)", [dormId, room.roomType]);
+      currentId = res.insertId;
+
+      if (room.perMonth) await conn.execute("INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)", [currentId, room.perMonth]);
+      if (room.perTerm) await conn.execute("INSERT INTO ROOM_PRICES (ROOM_TYPE_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)", [currentId, room.perTerm]);
+      await conn.execute("INSERT INTO ROOM_BEDS (ROOM_TYPE_ID, BED_TYPE_ID) VALUES (?, ?)", [currentId, getBedId(room.bedType)]);
+    }
+  }
+};
+
+export const updateRoomComponentImages_fn = async (
+  dormId: number,
+  dormName: string,
+  files: MulterFiles,
+  conn: PoolConnection
+) => {
+  const keywords = ["CEILING_IMG", "WALL_IMG", "FLOOR_IMG", "BED_IMG", "BATHROOM_IMG", "BALCONY_IMG"];
+
+  const [existingImages] = await conn.execute<RowDataPacket[]>(
+    "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?", [dormId]
+  );
+
+  const uploadTasks = [];
+
+  for (const keyword of keywords) {
+    if (files[keyword] && files[keyword][0]) {
+      const oldImgs = existingImages.filter((img: any) => img.IMAGE_PATH && img.IMAGE_PATH.includes(keyword));
+      for (const old of oldImgs) {
+        await deleteFromGCS(old.IMAGE_PATH);
+        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [old.DORM_IMG_ID]);
+      }
+
+      uploadTasks.push(
+        fileUpload(files[keyword][0], "dorms", dormName, "room_img", keyword)
+          .then(url => ({ url }))
+      );
+    }
+  }
+
+  const results = await Promise.all(uploadTasks);
+  for (const res of results) {
+    await conn.execute("INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)", [dormId, res.url]);
+  }
+};
+
+
+export const updateGalleryImages_fn = async (
+  dormId: number,
+  dormName: string,
+  files: MulterFiles,
+  conn: PoolConnection
+) => {
+  if (!files["OTHER_IMG"] || files["OTHER_IMG"].length === 0) return;
+
+  const newFiles = files["OTHER_IMG"];
+
+  const [allImages] = await conn.execute<RowDataPacket[]>(
+    "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
+    [dormId]
+  );
+
+  for (const [i, file] of newFiles.entries()) {
+    
+    const keyword = `other_${i}`; 
+
+    const oldImg = allImages.find((img: any) => 
+      img.IMAGE_PATH && img.IMAGE_PATH.includes(keyword)
+    );
+
+    if (oldImg) {
+      await deleteFromGCS(oldImg.IMAGE_PATH);
+      
+      await conn.execute(
+        "DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", 
+        [oldImg.DORM_IMG_ID]
+      ); 
+    }
+
+    const newUrl = await fileUpload(
+      file, 
+      "dorms", 
+      dormName, 
+      "other_img", 
+      keyword 
+    );
+
+    await conn.execute(
+      "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)", 
+      [dormId, newUrl]
+    );
+  }
+};
+
+
+export const removeDorm_api = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const conn = await dbcon.getConnection();
+
+  try {
+    const [result] = await conn.execute<ResultSetHeader>(
+      "UPDATE DORMITORIES SET DORM_STATUS_ID = 2 WHERE DORM_ID = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Dormitory not found" });
+    }
+
+    res.json({ success: true, message: "Dormitory status changed to Removed (2)" });
+
+  } catch (error: any) {
+    console.error("Remove Dorm Error:", error);
+    res.status(500).json({ success: false, message: "Failed to remove dorm", error: error.message });
+  } finally {
+    conn.release(); 
+  }
+};
+
+export const restoreDorm_api = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const conn = await dbcon.getConnection();
+
+  try {
+    const [result] = await conn.execute<ResultSetHeader>(
+      "UPDATE DORMITORIES SET DORM_STATUS_ID = 1 WHERE DORM_ID = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Dormitory not found" });
+    }
+
+    res.json({ success: true, message: "Dormitory status restored to Active (1)" });
+
+  } catch (error: any) {
+    console.error("Restore Dorm Error:", error);
+    res.status(500).json({ success: false, message: "Failed to restore dorm", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+
+export const addReview_api = async (req: Request, res: Response) => {
+  const { user_id, dorm_id, score, comment } = req.body;
+  if (!user_id || !dorm_id || score === undefined) {
+    return res.status(400).json({ success: false, message: "Missing required fields" });
+  }
+
+  const conn = await dbcon.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    try {
+      await conn.execute(
+        "INSERT INTO REVIEWS (USER_ID, DORM_ID, SCORE, COMMENTS) VALUES (?, ?, ?, ?)",
+        [user_id, dorm_id, score, comment]
+      );
+    } catch (err: any) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        throw new Error("คุณได้รีวิวหอพักนี้ไปแล้ว");
+      }
+      throw err;
+    }
+
+    const [avgResult] = await conn.execute<RowDataPacket[]>(
+      "SELECT AVG(SCORE) as avg_score FROM REVIEWS WHERE DORM_ID = ?",
+      [dorm_id]
+    );
+    
+    const newScore = avgResult[0]?.avg_score || 0; 
+
+    await conn.execute(
+      "UPDATE DORMITORIES SET SCORE = ? WHERE DORM_ID = ?",
+      [newScore, dorm_id]
+    );
+
+    await conn.commit();
+    res.status(201).json({ success: true, message: "Review added successfully", newDormScore: newScore });
+
+  } catch (error: any) {
+    await conn.rollback();
+    console.error("Add Review Error:", error);
+    
+    const msg = error.message === "คุณได้รีวิวหอพักนี้ไปแล้ว" ? error.message : "Failed to add review";
+    res.status(500).json({ success: false, message: msg, error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const deleteReview_api = async (req: Request, res: Response) => {
+  const { id } = req.params; 
+  const conn = await dbcon.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [reviewData] = await conn.execute<RowDataPacket[]>(
+      "SELECT DORM_ID FROM REVIEWS WHERE REVIEW_ID = ?",
+      [id]
+    );
+
+    if (reviewData.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: "Review not found" });
+    }
+    const dormId = reviewData[0]?.DORM_ID;
+    await conn.execute("DELETE FROM REVIEWS WHERE REVIEW_ID = ?", [id]);
+    const [avgResult] = await conn.execute<RowDataPacket[]>(
+      "SELECT AVG(SCORE) as avg_score FROM REVIEWS WHERE DORM_ID = ?",
+      [dormId]
+    );
+
+    const newScore = avgResult[0]?.avg_score || 0;
+
+    await conn.execute(
+      "UPDATE DORMITORIES SET SCORE = ? WHERE DORM_ID = ?",
+      [newScore, dormId]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: "Review deleted successfully", newDormScore: newScore });
+
+  } catch (error: any) {
+    await conn.rollback();
+    console.error("Delete Review Error:", error);
+    res.status(500).json({ success: false, message: "Failed to delete review", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const getDormsByOwner_api = async (req: Request, res: Response) => {
+  const { id } = req.params; 
+
+  try {
+    const sql = `
+      SELECT 
+        d.DORM_ID,
+        d.DORM_NAME,
+        d.FRONT_DORM_IMAGE,
+        d.ADDRESS,
+        d.SCORE,
+        d.VIEW_COUNT,
+        d.REQ_STATUS,       -- สถานะการอนุมัติ (0=รอ, 1=อนุมัติ)
+        ds.DORM_STATUS_NAME, -- สถานะหอ (ว่าง, เต็ม, ปิดปรับปรุง)
+        dz.ZONE_NAME,
+        
+        COALESCE(MIN(rp.PRICE), 0) AS start_price 
+
+      FROM DORMITORIES d
+      LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+      LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+      
+      WHERE d.DORM_OWNER_ID = ?
+      GROUP BY d.DORM_ID
+      ORDER BY d.DORM_ID DESC
+    `;
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [id]);
+
+    res.json({
+      success: true,
+      count: dorms.length,
+      data: dorms
+    });
+
+  } catch (error: any) {
+    console.error("Get My Dorms Error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+export const getReviewsByDormId_api = async (req: Request, res: Response) => {
+  const { id } = req.params; 
+
+  try {
+    const sql = `
+      SELECT 
+        r.REVIEW_ID,
+        r.SCORE,
+        r.COMMENTS,
+        r.CREATE_AT,
+        r.USER_ID,
+        u.USERNAME
+      FROM REVIEWS r
+      JOIN USERS u ON r.USER_ID = u.USER_ID
+      WHERE r.DORM_ID = ?
+      ORDER BY r.CREATE_AT DESC
+    `;
+
+    const [reviews] = await dbcon.query<RowDataPacket[]>(sql, [id]);
+
+    res.json({
+      success: true,
+      count: reviews.length,
+      data: reviews
+    });
+
+  } catch (error: any) {
+    console.error("Get Reviews Error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+export const getPendingOwners_api = async (req: Request, res: Response) => {
+  try {
+    const sql = `
+      SELECT 
+        do.DORM_OWNER_ID,
+        do.USER_ID,
+        do.FIRST_NAME,
+        do.LAST_NAME,
+        do.PROFILE_IMAGE,
+        do.REQ_STATUS,
+        do.FACEBOOK,
+        do.LINE,
+        u.USERNAME,
+        u.EMAIL,
+        u.PHONE_NUMBER
+      FROM DORM_OWNERS do
+      JOIN USERS u ON do.USER_ID = u.USER_ID
+      WHERE do.REQ_STATUS = 0
+    `;
+
+    const [owners] = await dbcon.query<RowDataPacket[]>(sql);
+
+    res.json({
+      success: true,
+      count: owners.length,
+      data: owners
+    });
+
+  } catch (error: any) {
+    console.error("Get Pending Owners Error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+export const getPopularDorms_api = async (req: Request, res: Response) => {
+  try {
+    // รับค่า limit จาก query params (ถ้าไม่ส่งมา default = 6 หอ)
+    const limit = req.query.limit ? Number(req.query.limit) : 6;
+
+    const sql = `
+      SELECT 
+        d.DORM_ID, 
+        d.DORM_NAME, 
+        d.ADDRESS,
+        d.SCORE,
+        d.FRONT_DORM_IMAGE as image, 
+        d.VIEW_COUNT,
+        dz.ZONE_NAME,
+        
+        -- หา "ราคาเริ่มต้น" (ต่ำสุด) ของหอนั้น
+        COALESCE(MIN(rp.PRICE), 0) as start_price,
+
+        -- นับจำนวนคนที่กด Favorite หอนี้ (เพื่อโชว์ความฮอต)
+        (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
+
+      FROM DORMITORIES d
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+      LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+      
+      WHERE d.DORM_STATUS_ID = 1 -- เอาเฉพาะหอที่เปิดให้บริการ
+      
+      GROUP BY d.DORM_ID
+      
+      -- เรียงตามคะแนน (มาก -> น้อย), ถ้าคะแนนเท่ากัน ดูยอดวิว, ถ้าเท่ากันดูยอด Fav
+      ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
+      
+      LIMIT ?
+    `;
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
+
+    res.json({
+      success: true,
+      count: dorms.length,
+      data: dorms
+    });
+
+  } catch (error: any) {
+    console.error("Get Popular Dorms Error:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
