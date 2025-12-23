@@ -62,7 +62,8 @@ router.delete('/other/delFavorite', userController.removeFavorite_api);//pass
 // ✅ Dormitory group
 router.get('/dorms/pendingReq', dormController.getPendingDormReq_api);//pass
 router.get('/dorms/zones', dormController.getAllZones); 
-router.get('/dorms', dormController.getAllDorms);        
+router.get('/dorms', dormController.getAllDorms);    
+router.get('/dorms/admin', dormController.getAllDorms_Admin);//pass    
 router.get('/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/dorms', imgTypeUploads, dormController.createDorm_api);//pass
 router.post('/dorms/approve', dormController.approveDormReq_api);//pass

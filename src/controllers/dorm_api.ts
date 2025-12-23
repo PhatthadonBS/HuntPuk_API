@@ -75,7 +75,47 @@ export const getAllDorms = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+// ✅ สำหรับ Admin: ดึงหอพักทั้งหมด (รวมที่โดนลบ) + ข้อมูลเจ้าของ
+// ✅ สำหรับ Admin: ดึงหอพักทั้งหมด + ข้อมูลเจ้าของ (Join USERS เพื่อเอา Email/Phone)
+export const getAllDorms_Admin = async (req: Request, res: Response) => {
+  try {
+    const sql = `
+      SELECT 
+        d.DORM_ID, 
+        d.DORM_NAME, 
+        d.DORM_STATUS_ID,
+        d.ADDRESS,
+        d.FRONT_DORM_IMAGE, 
+        
+        -- 1. ข้อมูลชื่อ จากตาราง DORM_OWNERS (do)
+        do.FIRST_NAME,
+        do.LAST_NAME,
+        
+        -- 2. ข้อมูลติดต่อ จากตาราง USERS (u)
+        u.EMAIL,
+        u.PHONE_NUMBER
 
+      FROM DORMITORIES d
+      -- Join หาเจ้าของหอ
+      LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+      -- ✅ ต้อง Join USERS ด้วย เพื่อเอา Email และ Phone
+      LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      
+      ORDER BY d.DORM_ID DESC
+    `;
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
+    
+    res.json({ 
+      success: true, 
+      data: dorms 
+    });
+
+  } catch (error: any) {
+    console.error("Error getAllDorms_Admin:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (แก้ไข JOIN USERS เพื่อเอาเบอร์โทร) ---
 export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
