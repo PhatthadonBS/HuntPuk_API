@@ -14,6 +14,7 @@ import { fileUpload, deleteFromGCS } from "../controllers/uploads";
 import { UserDormOwnerReqPostReq } from "../models/requests/user_dormOwnerReq_post_req";
 import { PoolConnection } from "mysql2/promise";
 import { DTOUserDormOwnerReqGetRes } from "../models/DOT/DTO_user_dOwner_post_res";
+import { DormOwnerGetRes } from "../models/responses/dorm_owner_get_res";
 
 dotenv.config();
 
@@ -550,6 +551,12 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       });
     }
 
+    const [owner] = await conn.execute<DormOwnerGetRes[]>("SELECT * FROM DORM_OWNERS WHERE USER_ID = ?", [user_id]);
+    if(owner[0]?.REQ_STATUS == 2){
+      await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?", [user_id])
+    }
+
+    
     publicUrl = await fileUpload(
       file,
       "users",

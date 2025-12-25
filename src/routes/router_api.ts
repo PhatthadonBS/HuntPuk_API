@@ -54,7 +54,7 @@ router.delete('/auth/OTPVerify', userController.OTP_Verify_api);//pass
 router.post('/auth/recoverAccount', userController.recoverAccount_api)//pass
 
 
-// other data group
+// other data groupt 
 router.post('/other/mailSenter', userController.resMailSender_api);//pass
 router.post('/other/addFavorite', userController.addFavorite_api);//pass
 router.delete('/other/delFavorite', userController.removeFavorite_api);//pass
