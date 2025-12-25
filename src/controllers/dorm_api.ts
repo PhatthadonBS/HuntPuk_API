@@ -232,7 +232,6 @@ export const getAllZones = async (req: Request, res: Response) => {
 
 export const addFacility_api = async (req: Request, res: Response) => {
   const { fac_name, uid } = req.body;
-  console.log(req.file);
   
   const file = req.file;
   const conn = await dbcon.getConnection();
@@ -255,19 +254,22 @@ export const addFacility_api = async (req: Request, res: Response) => {
       "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
       [fac_name]
     );
-    console.log("here");
-    
-    icon_url = await fileUpload(file, "users", `${user[0]?.USER_ID}_${user[0]?.USERNAME}`, "icons", fac_name).then((url) => {})
-    console.log(icon_url); return;
-    
-    if (dupFac[0]!["count"] > 0) return res.status(200).json("duplicate facility name");
 
+    if (dupFac[0]!["count"] > 0) return res.status(200).json("duplicate facility name");
+    icon_url = await fileUpload(file, "users", `${user[0]?.USERNAME}_${user[0]?.USER_ID}`, "icon", fac_name);
+    
     conn.beginTransaction();
-    const result = await conn.execute<ResultSetHeader>("INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, ADD_BY) VALUSE (? ,? ,?)", [])
+    const [result] = await conn.execute<ResultSetHeader>("INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, ADD_BY) VALUES (? ,? ,?)", [fac_name.toString().trim(), icon_url, uid]);
     conn.commit();
-  } catch (error) {
+    if(result.affectedRows > 0){
+      return res.status(201).json("add fac success");
+    }else{
+      return res.status(400).json("add fac fail");
+
+    }
+  } catch (error: any) {
     conn.rollback();
-    res.status(400).json(error);
+    res.status(400).json(error.message);
   } finally {
     conn.release();
   }
