@@ -524,9 +524,11 @@ export const removeFavorite_api = async (req: Request, res: Response) => {
   }
 };
 
+
 export const requestDormOwner_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let publicUrl: string | null = null;
+
   try {
     const {
       user_id,
@@ -538,7 +540,23 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       instagram,
       telegram,
     } = req.body;
+    
     const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "กรุณาอัปโหลดรูปโปรไฟล์ (Profile image is required)." 
+      });
+    }
+
+    publicUrl = await fileUpload(
+      file,
+      "users",
+      first_name ? first_name.trim() : "unknown",
+      null,
+      "profile"
+    );
 
     const userData: UserDormOwnerReqPostReq = {
       user_id,
@@ -550,40 +568,47 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       telegram,
       x,
     };
-    if (!file) {
-      return res
-        .status(400)
-        .json({ message: "Please upload a profile image." });
-    }
-
-    publicUrl = await fileUpload(
-      file,
-      "users",
-      first_name.trim(),
-      null,
-      "profile"
-    );
 
     await conn.beginTransaction();
+    
+    // 3. เรียกฟังก์ชัน Insert ลง DB
     const result = await requestDormOwner_fn(conn, userData, publicUrl);
+    
     await conn.commit();
 
     if (result.affectedRows > 0) {
       return res.status(201).json({
+        success: true,
         message: "Request submitted successfully",
         imageUrl: publicUrl,
         ownerId: result.insertId,
       });
     } else {
-      return res.status(500).json({ message: "Internal Server Error" });
+      throw new Error("Insert failed with no affected rows");
     }
-  } catch (error) {
-    console.error(error);
-    conn.rollback();
+
+  } catch (error: any) {
+    await conn.rollback();
+
     if (publicUrl) {
-      await deleteFromGCS(publicUrl);
+      await deleteFromGCS(publicUrl).catch(err => console.error("Failed to delete image:", err));
     }
-    return res.status(500).json({ message: "Internal Server Error", error });
+
+    console.error("Request Owner Error:", error);
+
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ 
+        success: false, 
+        message: "คุณได้ส่งคำขอไปแล้ว หรือเป็นเจ้าของหอพักอยู่แล้ว ไม่สามารถทำรายการซ้ำได้" 
+      });
+    }
+
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error", 
+      error: error.message 
+    });
+
   } finally {
     conn.release();
   }

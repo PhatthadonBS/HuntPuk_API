@@ -132,6 +132,9 @@ export const getDormById = async (req: Request, res: Response) => {
                 do.FIRST_NAME, 
                 do.LAST_NAME, 
                 do.LINE as OWNER_LINE,
+                do.FACEBOOK as OWNER_FACEBOOK,
+                do.INSTAGRAM as OWNER_INSTAGRAM,
+                do.TELEGRAM as OWNER_TELEGRAM,
                 u.PHONE_NUMBER as OWNER_PHONE  -- ดึงเบอร์จากตาราง USERS
             FROM DORMITORIES d
             LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
