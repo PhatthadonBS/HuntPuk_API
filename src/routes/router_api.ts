@@ -67,6 +67,8 @@ router.get('/dorms/admin', dormController.getAllDorms_Admin);//pass
 router.get('/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/dorms', imgTypeUploads, dormController.createDorm_api);//pass
 router.post('/dorms/approve', dormController.approveDormReq_api);//pass
+router.post('/dorms/facility', upload.single("fac"), dormController.addFacility_api);//pass
+
 
 //specific data group
 router.get('/spec/user/:id', userController.getUser_api)//pass

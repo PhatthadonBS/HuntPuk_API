@@ -229,10 +229,12 @@ export const getAllZones = async (req: Request, res: Response) => {
 
 export const addFacility_api = async (req: Request, res: Response) => {
   const { fac_name, uid } = req.body;
+  console.log(req.file);
+  
   const file = req.file;
   const conn = await dbcon.getConnection();
-  const icon_url = null;
-  if (!file || fac_name || uid) return res.status(400).json("not enough data");
+  let icon_url = null;
+  if (!file || !fac_name || !uid) return res.status(400).json("not enough data");
 
   try {
     const user = await (await getUsers_fn()).filter((u) => u.USER_ID == uid);
@@ -242,6 +244,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
       "SELECT COUNT(ADD_BY) count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
       [uid]
     );
+    
     if (limitAdd[0]!["count"] >= 3)
       return res.status(200).json("u have limit for add facility");
 
@@ -249,10 +252,15 @@ export const addFacility_api = async (req: Request, res: Response) => {
       "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
       [fac_name]
     );
-    if (dupFac[0]!["count"] > 0)
-      return res.status(200).json("duplicate facility name");
+    console.log("here");
+    
+    icon_url = await fileUpload(file, "users", `${user[0]?.USER_ID}_${user[0]?.USERNAME}`, "icons", fac_name).then((url) => {})
+    console.log(icon_url); return;
+    
+    if (dupFac[0]!["count"] > 0) return res.status(200).json("duplicate facility name");
 
     conn.beginTransaction();
+    const result = await conn.execute<ResultSetHeader>("INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, ADD_BY) VALUSE (? ,? ,?)", [])
     conn.commit();
   } catch (error) {
     conn.rollback();
