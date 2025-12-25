@@ -553,10 +553,13 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
 
     const [owner] = await conn.execute<DormOwnerGetRes[]>("SELECT * FROM DORM_OWNERS WHERE USER_ID = ?", [user_id]);
     if(owner[0]?.REQ_STATUS == 2){
-      await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?", [user_id])
+      const [reqRes] = await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?", [user_id])
+
+      if(reqRes.affectedRows > 0) return res.status(200).json(" send req agaain success")
+      else return res.status(400).json("something error")
     }
 
-    
+
     publicUrl = await fileUpload(
       file,
       "users",
