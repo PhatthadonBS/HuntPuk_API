@@ -13,7 +13,7 @@ import {
 } from "./user_api";
 import { UserLoginPostRes } from "../models/responses/user_login_post_res";
 import { deleteFolder, fileUpload } from "./uploads";
-import { MulterFiles } from "./dorm_api";
+import { getDormById_fn, MulterFiles } from "./dorm_api";
 import { PoolConnection } from "mysql2/promise";
 import { RoomTypeItem } from "../models/requests/RoomTypeItem";
 
@@ -31,7 +31,7 @@ export const test_send = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   const file = req.file;
   try {
-    const a = await deleteFolder("moji");
+    const a = await getDormById_fn(1, conn);
     // const [a] = await conn.query("SELECT * FROM IMAGE_ROOM_TYPES");
 
     res.status(200).json(a);

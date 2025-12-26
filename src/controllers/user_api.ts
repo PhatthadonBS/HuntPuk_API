@@ -543,7 +543,9 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     } = req.body;
     
     const file = req.file;
-
+    
+    const [user] = (await getUsers_fn()).filter((u) => u.USER_ID == Number(user_id));
+    if(!user) return res.status(400).json("User not found");
     if (!file) {
       return res.status(400).json({ 
         success: false, 
@@ -559,11 +561,10 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       else return res.status(400).json("something error")
     }
 
-
     publicUrl = await fileUpload(
       file,
       "users",
-      first_name ? first_name.trim() : "unknown",
+      `${user.USERNAME}_${user.USER_ID}`,
       null,
       "profile"
     );

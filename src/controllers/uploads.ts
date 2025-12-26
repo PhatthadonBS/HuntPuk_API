@@ -20,9 +20,9 @@ export async function fileUpload(
 
   if (
     subFolder &&
-    subFolder !== "icon" &&
-    subFolder !== "room_img" &&
-    subFolder !== "other_img"
+    subFolder !== "icons" &&
+    subFolder !== "room_imgs" &&
+    subFolder !== "other_imgs"
   ) {
     throw new Error("Invalid subFolder");
   }

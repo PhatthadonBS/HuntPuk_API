@@ -68,6 +68,7 @@ router.get('/dorms/popular', dormController.getPopularDorms_api);//pass
 router.post('/dorms', imgTypeUploads, dormController.createDorm_api);//pass
 router.post('/dorms/approve', dormController.approveDormReq_api);//pass
 router.post('/dorms/facility', upload.single("fac"), dormController.addFacility_api);//pass
+router.get('/dorms/facilities', dormController.getFacilities_api);//pass
 
 
 //specific data group
@@ -82,7 +83,8 @@ router.put('/spec/dorm/:id', imgTypeUploads, dormController.updateDorm_api)//pas
 router.get('/spec/dorm/:id', dormController.getDormsByOwner_api)//pass
 router.delete('/spec/review/:id', dormController.deleteReview_api)//pass
 router.get('/dorms/review/:id', dormController.getReviewsByDormId_api);//pass
-router.get('/dorms/:id', dormController.getDormById);   
+router.get('/dorms/:id', dormController.getDormById);//pass
+router.put('/dorms/facility/:user_id', upload.single("icon"), dormController.updateFacility_api);//pass
 
 
 
