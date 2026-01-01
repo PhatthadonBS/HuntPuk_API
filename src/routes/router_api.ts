@@ -45,7 +45,7 @@ router.post('/user/dormOwner', upload.single("file"), userController.requestDorm
 router.put('/user/approve', userController.approveDormOwner);//pass
 router.post('/user/review', dormController.addReview_api);//pass
 router.get('/user/dormOwnerReq', dormController.getPendingOwners_api);//pass
-
+   
 
 // auth group
 router.post('/auth/login', userController.login);//pass
@@ -84,6 +84,7 @@ router.get('/spec/dorm/:id', dormController.getDormsByOwner_api)//pass
 router.delete('/spec/review/:id', dormController.deleteReview_api)//pass
 router.get('/dorms/review/:id', dormController.getReviewsByDormId_api);//pass
 router.get('/dorms/:id', dormController.getDormById);//pass
+router.get('/dorms/facility/:dorm_id', dormController.getFacilitiesOfDorm_api);//pass
 router.put('/dorms/facility/:user_id', upload.single("icon"), dormController.updateFacility_api);//pass
 
 

@@ -11,14 +11,13 @@ import { DormRoomTypeReqPostReq } from "../models/requests/dorm_roomTypeReq_post
 import { RoomTypeItem } from "../models/requests/RoomTypeItem";
 import { User } from "../models/responses/user_data_get_res";
 import { DormDataGetRes } from "../models/responses/dorm_data_get_res";
+import { FacOfDormGetRes } from "../models/responses/fac_ofDorm_get_res";
 
 export type MulterFiles = {
   [fieldname: string]: Express.Multer.File[];
 };
 
 export const getAllDorms = async (req: Request, res: Response) => {
-    const conn = await dbcon.getConnection();
-
   try {
     const { search, zone, minPrice, maxPrice } = req.query;
 
@@ -71,31 +70,28 @@ export const getAllDorms = async (req: Request, res: Response) => {
       sql += ` HAVING ` + havingClauses.join(" AND ");
     }
 
-    const [dorms] = await conn.query<RowDataPacket[]>(sql, params);
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
     res.json({ success: true, data: dorms });
   } catch (error) {
     console.error("Error in getAllDorms:", error);
     res.status(500).json({ success: false, message: "Server Error" });
-  }finally{
-        conn.release();
-
   }
 };
 
-
 export async function getDormById_fn(did: number, conn: PoolConnection) {
   try {
-    const [dorm] = await conn.execute<DormDataGetRes[]>("SELECT * FROM DORMITORIES WHERE DORM_ID = ?", [Number(did)])
-    if(dorm.length > 0) return dorm;
+    const [dorm] = await conn.execute<DormDataGetRes[]>(
+      "SELECT * FROM DORMITORIES WHERE DORM_ID = ?",
+      [Number(did)]
+    );
+    if (dorm.length > 0) return dorm;
     return [];
   } catch (error) {
-    throw error
+    throw error;
   }
 }
 
 export const getAllDorms_Admin = async (req: Request, res: Response) => {
-    const conn = await dbcon.getConnection();
-
   try {
     const sql = `
       SELECT 
@@ -122,7 +118,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
       ORDER BY d.DORM_ID DESC
     `;
 
-    const [dorms] = await conn.query<RowDataPacket[]>(sql);
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
 
     res.json({
       success: true,
@@ -133,17 +129,13 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-        conn.release();
-
   }
 };
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (แก้ไข JOIN USERS เพื่อเอาเบอร์โทร) ---
 export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
   console.log(`[API] Requesting Dorm ID: ${id}`);
-    const conn = await dbcon.getConnection();
-
+  const conn = await dbcon.getConnection();
 
   try {
     // ✅ แก้ไข SQL: JOIN ตาราง USERS เพื่อดึง PHONE_NUMBER
@@ -240,23 +232,19 @@ export const getDormById = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error: " + error.message });
-  }finally{
+  } finally {
     conn.release();
   }
 };
 
 export const getAllZones = async (req: Request, res: Response) => {
-    const conn = await dbcon.getConnection();
-
   try {
     const sql = `SELECT * FROM DORM_ZONES ORDER BY ZONE_ID ASC`;
-    const [zones] = await conn.query<RowDataPacket[]>(sql);
+    const [zones] = await dbcon.query<RowDataPacket[]>(sql);
     res.json({ success: true, data: zones });
   } catch (error) {
     console.error("Error in getAllZones:", error);
     res.status(500).json({ success: false, message: "Server Error" });
-  }finally{
-    conn.release();
   }
 };
 
@@ -416,7 +404,13 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     if (files["OTHER_IMG"] && files["OTHER_IMG"].length > 0) {
       const otherTasks = files["OTHER_IMG"].map((file, idx) =>
-        fileUpload(file, "dorms", `${name}_${owner_id}`, "other_imgs", `other_${idx}`)
+        fileUpload(
+          file,
+          "dorms",
+          `${name}_${owner_id}`,
+          "other_imgs",
+          `other_${idx}`
+        )
       );
       const otherUrls = await Promise.all(otherTasks);
 
@@ -442,9 +436,13 @@ export const createDorm_api = async (req: Request, res: Response) => {
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
       if (files[field]?.[0]) {
         roomUploadTasks.push(
-          fileUpload(files[field][0], "dorms", `${name}_${owner_id}`, "room_imgs", field).then(
-            (url) => ({ typeId, url })
-          )
+          fileUpload(
+            files[field][0],
+            "dorms",
+            `${name}_${owner_id}`,
+            "room_imgs",
+            field
+          ).then((url) => ({ typeId, url }))
         );
       }
     }
@@ -521,7 +519,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
   try {
     await conn.beginTransaction();
     const [dormData] = await getDormById_fn(dormId, conn);
-    if(!dormData) return res.status(400).json("Dorm not found");
+    if (!dormData) return res.status(400).json("Dorm not found");
     const ownerId = dormData.DORM_OWNER_ID;
     await updateDormInfo_fn(dormId, body, files, conn, ownerId);
 
@@ -1036,8 +1034,6 @@ export const deleteReview_api = async (req: Request, res: Response) => {
 };
 
 export const getDormsByOwner_api = async (req: Request, res: Response) => {
-    const conn = await dbcon.getConnection();
-
   const { id } = req.params;
 
   try {
@@ -1066,7 +1062,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
       ORDER BY d.DORM_ID DESC
     `;
 
-    const [dorms] = await conn.query<RowDataPacket[]>(sql, [id]);
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [id]);
 
     res.json({
       success: true,
@@ -1078,14 +1074,10 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-        conn.release();
-
   }
 };
 
 export const getReviewsByDormId_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
 
   const { id } = req.params;
 
@@ -1104,7 +1096,7 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
       ORDER BY r.CREATE_AT DESC
     `;
 
-    const [reviews] = await conn.query<RowDataPacket[]>(sql, [id]);
+    const [reviews] = await dbcon.query<RowDataPacket[]>(sql, [id]);
 
     res.json({
       success: true,
@@ -1116,13 +1108,10 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-    conn.release();
   }
 };
 
 export const getPendingOwners_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const sql = `
         SELECT 
@@ -1138,7 +1127,7 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
       WHERE do.REQ_STATUS = 0;
     `;
 
-    const [owners] = await conn.query<RowDataPacket[]>(sql);
+    const [owners] = await dbcon.query<RowDataPacket[]>(sql);
 
     res.json({
       success: true,
@@ -1150,13 +1139,10 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-    await conn.release();
   }
 };
 
 export const getPopularDorms_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
 
@@ -1183,7 +1169,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
       LIMIT ?
     `;
 
-    const [dorms] = await conn.query<RowDataPacket[]>(sql, [limit]);
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
 
     res.json({
       success: true,
@@ -1195,8 +1181,6 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-    conn.release();
   }
 };
 
@@ -1272,7 +1256,6 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
 };
 
 export const getPendingDormReq_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const sql = `
       SELECT 
@@ -1302,7 +1285,7 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       ORDER BY d.REG_AT ASC   
     `;
 
-    const [dorms] = await conn.query<RowDataPacket[]>(sql);
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
     res.json({
       data: dorms,
     });
@@ -1311,8 +1294,6 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, message: "Server Error", error: error.message });
-  }finally{
-    conn.release();
   }
 };
 
@@ -1322,14 +1303,37 @@ export const getFacilities_api = async (req: Request, res: Response) => {
     const sql = `SELECT * FROM FACILITIES_TYPES`;
 
     const [facs] = await conn.query<RowDataPacket[]>(sql);
-    if(facs.length > 0){
+    if (facs.length > 0) {
       return res.status(200).json(facs);
-    }else{
+    } else {
       return res.status(404).json("Have not facilities");
     }
   } catch (error: any) {
     res.status(500).json({ message: "Server Error", error: error.message });
-  }finally{
+  } finally {
+    conn.release();
+  }
+};
+
+export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
+  const conn = await dbcon.getConnection();
+  const { dorm_id } = req.params;
+  try {
+    const sql = `
+    SELECT FD.FAC_DORM_ID, FD.FAC_TYPE_ID, FT.FAC_TYPE_NAME, FT.FAC_TYPE_ICON, FD.DORM_ID 
+    FROM FACILITIES_DORMS FD
+    JOIN FACILITIES_TYPES FT ON FT.FAC_TYPE_ID = FD.FAC_TYPE_ID
+    WHERE FD.DORM_ID = ?`;
+
+    const [facs] = await conn.query<FacOfDormGetRes[]>(sql, [Number(dorm_id)]);
+    if (facs.length > 0) {
+      return res.status(200).json(facs);
+    } else {
+      return res.status(404).json("Have not facilities");
+    }
+  } catch (error: any) {
+    res.status(500).json({ message: "Server Error", error: error.message });
+  } finally {
     conn.release();
   }
 };
@@ -1340,44 +1344,47 @@ export const updateFacility_api = async (req: Request, res: Response) => {
   const icon = req.file;
   const uid = Number(user_id);
   const conn = await dbcon.getConnection();
-  let iconUrl: string = '';
+  let iconUrl: string = "";
   try {
-    if(!fac_id) return res.status(400).json("not found facility");
+    if (!fac_id) return res.status(400).json("not found facility");
     let user: string;
 
-    if(Number(uid) == 1){
-      user = "admin"
-    }else{
+    if (Number(uid) == 1) {
+      user = "admin";
+    } else {
       const [userData] = (await getUsers_fn()).filter((u) => u.USER_ID == uid);
-      if(!userData) return res.status(400).json("User not found");
-      user = `${userData.USERNAME}_${userData.USER_ID}`
+      if (!userData) return res.status(400).json("User not found");
+      user = `${userData.USERNAME}_${userData.USER_ID}`;
     }
 
     const values = [];
     const sql = [];
 
-    if(fac_name) {
+    if (fac_name) {
       sql.push(`FAC_TYPE_NAME = ?`);
-      values.push(fac_name)
+      values.push(fac_name);
     }
 
-    if(icon){
+    if (icon) {
       sql.push(`FAC_TYPE_ICON = ?`);
-      iconUrl = await fileUpload(icon, "users", user, "icons", fac_name)
-      values.push(iconUrl)
+      iconUrl = await fileUpload(icon, "users", user, "icons", fac_name);
+      values.push(iconUrl);
     }
 
-    if(sql.length === 0) return res.status(200).json("Have not facility update");
+    if (sql.length === 0)
+      return res.status(200).json("Have not facility update");
 
-    const [facs] = await conn.query<ResultSetHeader>(`UPDATE FACILITIES_TYPES SET ${sql.join(", ")} WHERE FAC_TYPE_ID = ?`, [...values, fac_id]);
-    if(facs.affectedRows > 0){
-      return res.status(201).json({url: iconUrl})
+    const [facs] = await conn.query<ResultSetHeader>(
+      `UPDATE FACILITIES_TYPES SET ${sql.join(", ")} WHERE FAC_TYPE_ID = ?`,
+      [...values, fac_id]
+    );
+    if (facs.affectedRows > 0) {
+      return res.status(201).json({ url: iconUrl });
     }
-
   } catch (error: any) {
-    await deleteFromGCS(iconUrl)
+    await deleteFromGCS(iconUrl);
     res.status(500).json({ message: "Server Error", error: error.message });
-  }finally{
+  } finally {
     conn.release();
   }
 };

@@ -129,6 +129,8 @@ export const registerSec1 = async (req: Request, res: Response) => {
 //ยืนยันตัวตนผ่านแล้วส่ง objที่ได้จาก registersec1 and otpverify แล้วส่งข้อมูลมาพร้อมบัตรผ่าน
 export const registerSec2 = async (req: Request, res: Response) => {
   const { userData, verify, admin } = req.body;
+  console.log(req.body);
+
   const data: UserRegPostReq = {
     username: userData["username"],
     email: userData["email"],
@@ -138,9 +140,15 @@ export const registerSec2 = async (req: Request, res: Response) => {
 
   const regex = /^\$2b\$10\$.{20,}/;
 
-  if((!regex.test(data.password))) return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
+  if (!regex.test(data.password))
+    return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
   const verStatus = verify;
-
+  
+  if (!verStatus && !admin) {
+    return res.status(400).json({
+      message: "ยังไม่ยืนยัน OTP",
+    });
+  }
   const conn = await dbcon.getConnection();
   try {
     if (verStatus || admin) {
@@ -169,20 +177,24 @@ export const registerSec2 = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
+  console.log(req.body);
+
   const conn = await dbcon.getConnection();
   try {
-    const [users] = await conn.query<UserLoginPostRes[]>(
+    const [user] = await conn.query<UserLoginPostRes[]>(
       "SELECT * FROM USERS WHERE EMAIL = ?",
       [email]
     );
 
-    if (users.length === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "ไม่พบผู้ใช้งานนี้" });
+    if (!user) {
+      return res.status(400).json("User not fount");
     }
 
-    const isMatch = await bcrypt.compare(password, users[0]!.PASSWORD);
+    if (user[0]?.ACCOUNT_STATUS != 0) {
+      return res.status(400).json("User accout have not permission");
+    }
+
+    const isMatch = await bcrypt.compare(password, user[0]!.PASSWORD);
     if (!isMatch) {
       return res
         .status(400)
@@ -193,11 +205,11 @@ export const login = async (req: Request, res: Response) => {
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
       user: {
-        id: users[0]!.USER_ID,
-        username: users[0]!.USERNAME,
-        email: users[0]!.EMAIL,
-        role_id: users[0]?.ROLE_TYPE_ID,
-        accout_status: users[0]!.ACCOUNT_STATUS
+        id: user[0]!.USER_ID,
+        username: user[0]!.USERNAME,
+        email: user[0]!.EMAIL,
+        role_id: user[0]?.ROLE_TYPE_ID,
+        accout_status: user[0]!.ACCOUNT_STATUS,
       },
     });
   } catch (error) {
@@ -251,7 +263,6 @@ export const resetPassword_api = async (req: Request, res: Response) => {
 
 //จะส่งไปทั้ง member and owner dorm  ใช้ filter กรองเอาที่ front เด้อ
 export const getUsers_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const users = await getUsers_fn();
     if (users.length > 0) {
@@ -261,17 +272,14 @@ export const getUsers_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(400).json(error);
-  } finally {
-    conn.release();
-  }
+  } 
 };
 
 export const getUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const conn = await dbcon.getConnection();
   try {
-    if(Number(id) == 1 ) return res.status(404).json("not found user");
-    const [users] = await conn.execute<UserAllGetRes[]>(
+    if (Number(id) == 1) return res.status(404).json("not found user");
+    const [users] = await dbcon.execute<UserAllGetRes[]>(
       `
       SELECT
       USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS
@@ -288,13 +296,10 @@ export const getUser_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(400).json(error);
-  } finally {
-    conn.release();
   }
 };
 
 export const getMembers_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const users = await getUsers_fn();
     const members = users.filter((member) => member.ROLE_TYPE_ID == 1);
@@ -306,13 +311,10 @@ export const getMembers_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(400).json(error);
-  } finally {
-    conn.release();
   }
 };
 
 export const getDormOwners_api = async (req: Request, res: Response) => {
-  const conn = await dbcon.getConnection();
   try {
     const users = await getUsers_fn();
     const dormOwners = users.filter((member) => member.ROLE_TYPE_ID == 2);
@@ -324,8 +326,6 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(400).json(error);
-  } finally {
-    conn.release();
   }
 };
 
@@ -378,12 +378,11 @@ export const updateUser_api = async (req: Request, res: Response) => {
 
 export const deleteAccount_api = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const conn = await dbcon.getConnection();
 
   try {
     const sql = "UPDATE USERS SET ACCOUNT_STATUS = 1 WHERE USER_ID = ?"; //0 = online, 1 = offline, 2 = banned
 
-    const [result] = await conn.execute<ResultSetHeader>(sql, [id]);
+    const [result] = await dbcon.execute<ResultSetHeader>(sql, [id]);
 
     if (result.affectedRows > 0) {
       return res
@@ -394,8 +393,6 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(500).json(error);
-  } finally {
-    conn.release();
   }
 };
 
@@ -525,7 +522,6 @@ export const removeFavorite_api = async (req: Request, res: Response) => {
   }
 };
 
-
 export const requestDormOwner_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let publicUrl: string | null = null;
@@ -541,24 +537,33 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       instagram,
       telegram,
     } = req.body;
-    
+
     const file = req.file;
-    
-    const [user] = (await getUsers_fn()).filter((u) => u.USER_ID == Number(user_id));
-    if(!user) return res.status(400).json("User not found");
+
+    const [user] = (await getUsers_fn()).filter(
+      (u) => u.USER_ID == Number(user_id)
+    );
+    if (!user) return res.status(400).json("User not found");
     if (!file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "กรุณาอัปโหลดรูปโปรไฟล์ (Profile image is required)." 
+      return res.status(400).json({
+        success: false,
+        message: "กรุณาอัปโหลดรูปโปรไฟล์ (Profile image is required).",
       });
     }
 
-    const [owner] = await conn.execute<DormOwnerGetRes[]>("SELECT * FROM DORM_OWNERS WHERE USER_ID = ?", [user_id]);
-    if(owner[0]?.REQ_STATUS == 2){
-      const [reqRes] = await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?", [user_id])
+    const [owner] = await conn.execute<DormOwnerGetRes[]>(
+      "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
+      [user_id]
+    );
+    if (owner[0]?.REQ_STATUS == 2) {
+      const [reqRes] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?",
+        [user_id]
+      );
 
-      if(reqRes.affectedRows > 0) return res.status(200).json(" send req agaain success")
-      else return res.status(400).json("something error")
+      if (reqRes.affectedRows > 0)
+        return res.status(200).json(" send req agaain success");
+      else return res.status(400).json("something error");
     }
 
     publicUrl = await fileUpload(
@@ -581,10 +586,10 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     };
 
     await conn.beginTransaction();
-    
+
     // 3. เรียกฟังก์ชัน Insert ลง DB
     const result = await requestDormOwner_fn(conn, userData, publicUrl);
-    
+
     await conn.commit();
 
     if (result.affectedRows > 0) {
@@ -597,29 +602,30 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     } else {
       throw new Error("Insert failed with no affected rows");
     }
-
   } catch (error: any) {
     await conn.rollback();
 
     if (publicUrl) {
-      await deleteFromGCS(publicUrl).catch(err => console.error("Failed to delete image:", err));
+      await deleteFromGCS(publicUrl).catch((err) =>
+        console.error("Failed to delete image:", err)
+      );
     }
 
     console.error("Request Owner Error:", error);
 
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ 
-        success: false, 
-        message: "คุณได้ส่งคำขอไปแล้ว หรือเป็นเจ้าของหอพักอยู่แล้ว ไม่สามารถทำรายการซ้ำได้" 
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "คุณได้ส่งคำขอไปแล้ว หรือเป็นเจ้าของหอพักอยู่แล้ว ไม่สามารถทำรายการซ้ำได้",
       });
     }
 
-    return res.status(500).json({ 
-      success: false, 
-      message: "Internal Server Error", 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
     });
-
   } finally {
     conn.release();
   }
@@ -675,16 +681,14 @@ export const approveDormOwner = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getMyFavorites_api = async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params; 
-        const conn = await dbcon.getConnection();
-        if (!id) {
-            return res.status(400).json({ message: 'User ID is required' });
-        }
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-        const sql = `
+    const sql = `
             SELECT 
                 D.DORM_ID AS DORMID,
                 D.DORM_NAME AS DORMNAME,
@@ -702,22 +706,20 @@ export const getMyFavorites_api = async (req: Request, res: Response) => {
             ORDER BY F.FAV_ID DESC
         `;
 
-        const [rows] = await conn.query<RowDataPacket[]>(sql, [id]);
+    const [rows] = await dbcon.query<RowDataPacket[]>(sql, [id]);
 
-        if(rows.length > 0){
-          return res.status(200).json(rows);
-
-        }else{
-          return res.status(400).json([])
-        }
-
-    } catch (error) {
-        console.error('Error fetching favorites:', error);
-        return res.status(500).json({ 
-            success: false, 
-            message: 'Internal server error' 
-        });
+    if (rows.length > 0) {
+      return res.status(200).json(rows);
+    } else {
+      return res.status(400).json([]);
     }
+  } catch (error) {
+    console.error("Error fetching favorites:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 };
 
 //////////////////////////////////   other api --End--  ////////////////////////////////////////////////////////////////
@@ -986,7 +988,7 @@ export async function OTP_Sender_fn(email: string) {
                     ${otp}
                 </div>
 
-                <p style="color: #555;">รหัสนี้จะหมดอายุภายใน <strong>60 วินาที</strong></p>
+                <p style="color: #555;">รหัสนี้จะหมดอายุภายใน <strong>3 นาที</strong></p>
                 
                 <div class="warning">
                     ⚠️ โปรดอย่าแชร์รหัสนี้ให้ผู้อื่น เพื่อความปลอดภัยของบัญชี
