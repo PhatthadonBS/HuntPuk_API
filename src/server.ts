@@ -5,6 +5,7 @@ import router from "./routes/router_api";
 import bodyParser from "body-parser";
 import cors from "cors";
 import os from  "os"; 
+import rateLimit from "express-rate-limit";
 dotenv.config();
  
 const port = process.env.PORT || 3000;
@@ -12,9 +13,17 @@ const app = express();
 
 app.use(
   cors({
-    origin: ['http://192.168.0.108:8100', 'http://localhost:8100'],
+    origin: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
   })
 );
 
