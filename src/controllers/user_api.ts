@@ -208,6 +208,7 @@ export const login = async (req: Request, res: Response) => {
         id: user[0]!.USER_ID,
         username: user[0]!.USERNAME,
         email: user[0]!.EMAIL,
+        phone: user[0]!.PHONE_NUMBER,
         role_id: user[0]?.ROLE_TYPE_ID,
         accout_status: user[0]!.ACCOUNT_STATUS,
       },
