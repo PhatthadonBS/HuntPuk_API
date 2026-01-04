@@ -129,7 +129,6 @@ export const registerSec1 = async (req: Request, res: Response) => {
 //ยืนยันตัวตนผ่านแล้วส่ง objที่ได้จาก registersec1 and otpverify แล้วส่งข้อมูลมาพร้อมบัตรผ่าน
 export const registerSec2 = async (req: Request, res: Response) => {
   const { userData, verify, admin } = req.body;
-  console.log(req.body);
 
   const data: UserRegPostReq = {
     username: userData["username"],
@@ -143,7 +142,7 @@ export const registerSec2 = async (req: Request, res: Response) => {
   if (!regex.test(data.password))
     return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
   const verStatus = verify;
-  
+
   if (!verStatus && !admin) {
     return res.status(400).json({
       message: "ยังไม่ยืนยัน OTP",
@@ -177,7 +176,6 @@ export const registerSec2 = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
-  console.log(req.body);
 
   const conn = await dbcon.getConnection();
   try {
@@ -273,7 +271,7 @@ export const getUsers_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(400).json(error);
-  } 
+  }
 };
 
 export const getUser_api = async (req: Request, res: Response) => {
@@ -291,7 +289,7 @@ export const getUser_api = async (req: Request, res: Response) => {
       [id?.toString().trim()]
     );
     if (users.length > 0) {
-      return res.status(200).json(users);
+      return res.status(200).json(users[0]);
     } else {
       return res.status(404).json("user not found");
     }
@@ -334,10 +332,18 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 export const updateUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { username, phone_number } = req.body;
-
+  console.log(req.body);
+  
   const conn = await dbcon.getConnection();
 
   try {
+    const [userData] = await conn.query<UserDataPostRes[]>(
+      "SELECT * FROM USERS WHERE USER_ID = ?",
+      [id]
+    );
+    if (!userData || userData.length <= 0)
+      return res.status(404).json("Not found user");
+
     if (!username || !phone_number) {
       return res
         .status(400)
@@ -350,17 +356,20 @@ export const updateUser_api = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "รูปเบอร์โทรไม่ถูกต้อง" });
     }
 
-    const sql = `
-            UPDATE USERS 
-            SET USERNAME = ?, PHONE_NUMBER = ? 
-            WHERE USER_ID = ?
-        `;
+    let sql: string;
+    let params = [];
 
-    const [result] = await conn.execute<ResultSetHeader>(sql, [
-      username.toString().trim(),
-      phone_number.toString().trim(),
-      id,
-    ]);
+    if (phone_number == userData[0]!.PHONE_NUMBER) {
+      sql = "UPDATE USERS SET USERNAME = ? WHERE USER_ID = ?";
+      params.push(username);
+    } else {
+      sql = "UPDATE USERS SET USERNAME = ?, PHONE_NUMBER = ? WHERE USER_ID = ?";
+      params.push(username);
+      params.push(phone_number);
+    }
+    params.push(Number(id));
+
+    const [result] = await conn.execute<ResultSetHeader>(sql, [...params]);
 
     if (result.affectedRows > 0) {
       return res.status(200).json({ message: "Update user success" });

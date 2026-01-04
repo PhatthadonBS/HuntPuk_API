@@ -134,7 +134,6 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (แก้ไข JOIN USERS เพื่อเอาเบอร์โทร) ---
 export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  console.log(`[API] Requesting Dorm ID: ${id}`);
   const conn = await dbcon.getConnection();
 
   try {
