@@ -21,41 +21,42 @@ export const getAllDorms = async (req: Request, res: Response) => {
   try {
     const { search, zone, minPrice, maxPrice } = req.query;
 
+    // 1. Base Query (ตัด GROUP BY และ ORDER BY ออกไปก่อน)
     let sql = `
             SELECT 
                 d.DORM_ID, 
                 d.DORM_NAME, 
-                d.ADDRESS,
-                d.SCORE,
+                d.ADDRESS, 
+                d.SCORE, 
                 d.FRONT_DORM_IMAGE as image, 
-                dz.ZONE_NAME as zone,
+                dz.ZONE_NAME as zone, 
                 ST_X(d.COORDINATES) as lat, 
-                ST_Y(d.COORDINATES) as lng,
-                MIN(rp.PRICE) as start_price
+                ST_Y(d.COORDINATES) as lng, 
+                COALESCE(MIN(rp.PRICE), 0) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
-            LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+            LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE d.DORM_STATUS_ID = 1
         `;
 
     const params: any[] = [];
 
-    // 1.1 กรองด้วยคำค้นหา (ชื่อหอ หรือ ชื่อโซน)
+    // 2. ต่อ WHERE Condition (Search & Zone)
     if (search) {
       sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    // 1.2 ✅ กรองด้วยโซน (จาก Dropdown)
     if (zone) {
       sql += ` AND dz.ZONE_NAME = ? `;
       params.push(zone);
     }
 
-    sql += ` GROUP BY d.DORM_ID `;
+    // 3. ต่อ GROUP BY (ต้องมาหลัง WHERE เสมอ)
+    sql += ` GROUP BY d.DORM_ID, dz.ZONE_NAME `;
 
-    // 1.3 ✅ กรองราคา (ต้องใช้ HAVING เพราะ start_price มาจาก Aggregate Function)
+    // 4. ต่อ HAVING (Price Range)
     const havingClauses = [];
     if (minPrice) {
       havingClauses.push(`start_price >= ?`);
@@ -69,6 +70,9 @@ export const getAllDorms = async (req: Request, res: Response) => {
     if (havingClauses.length > 0) {
       sql += ` HAVING ` + havingClauses.join(" AND ");
     }
+
+    // 5. ต่อ ORDER BY (ต้องอยู่ท้ายสุดเสมอ)
+    sql += ` ORDER BY d.UPDATE_AT DESC `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
     res.json({ success: true, data: dorms });
@@ -1037,28 +1041,25 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
 
   try {
     const sql = `
-      SELECT 
-        d.DORM_ID,
-        d.DORM_NAME,
-        d.FRONT_DORM_IMAGE,
-        d.ADDRESS,
-        d.SCORE,
-        d.VIEW_COUNT,
-        d.REQ_STATUS,       -- สถานะการอนุมัติ (0=รอ, 1=อนุมัติ)
-        ds.DORM_STATUS_NAME, -- สถานะหอ (ว่าง, เต็ม, ปิดปรับปรุง)
-        dz.ZONE_NAME,
-        
-        COALESCE(MIN(rp.PRICE), 0) AS start_price 
-
-      FROM DORMITORIES d
-      LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
-      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-      LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
-      LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
-      
-      WHERE d.DORM_OWNER_ID = ?
-      GROUP BY d.DORM_ID
-      ORDER BY d.DORM_ID DESC
+                SELECT 
+                    d.DORM_ID,
+                    d.DORM_NAME,
+                    d.FRONT_DORM_IMAGE,
+                    d.ADDRESS,
+                    d.SCORE,
+                    d.VIEW_COUNT,
+                    d.REQ_STATUS,       
+                    ds.DORM_STATUS_NAME, 
+                    dz.ZONE_NAME,
+                    COALESCE(MIN(rp.PRICE), 0) AS start_price 
+                FROM DORMITORIES d
+                LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+                LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+                LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+                LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+                WHERE d.DORM_OWNER_ID = ?
+                GROUP BY d.DORM_ID
+                ORDER BY d.DORM_ID DESC
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [id]);
@@ -1146,26 +1147,23 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
 
     const sql = `
-      SELECT 
-        d.DORM_ID, 
-        d.DORM_NAME, 
-        d.ADDRESS,
-        d.SCORE,
-        d.FRONT_DORM_IMAGE as image, 
-        d.VIEW_COUNT,
-        dz.ZONE_NAME,
-        COALESCE(MIN(rp.PRICE), 0) as start_price,
-        (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
-
-      FROM DORMITORIES d
-      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-      LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
-      LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
-      
-      GROUP BY d.DORM_ID
-      ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
-      
-      LIMIT ?
+              SELECT 
+                  d.DORM_ID, 
+                  d.DORM_NAME, 
+                  d.ADDRESS,
+                  d.SCORE,
+                  d.FRONT_DORM_IMAGE as image, 
+                  d.VIEW_COUNT,
+                  dz.ZONE_NAME,
+                  COALESCE(MIN(rp.PRICE), 0) as start_price,
+                  (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
+              FROM DORMITORIES d
+              LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+              LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+              LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+              GROUP BY d.DORM_ID
+              ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
+              LIMIT ?
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
