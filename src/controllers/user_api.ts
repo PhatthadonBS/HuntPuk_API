@@ -289,7 +289,6 @@ export const getUser_api = async (req: Request, res: Response) => {
       USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS
       FROM USERS 
       WHERE USER_ID = ?
-      AND USER_ID != 1
       `,
       [id?.toString().trim()]
     );
