@@ -391,7 +391,7 @@ export const updateUser_api = async (req: Request, res: Response) => {
 
 export const deleteAccount_api = async (req: Request, res: Response) => {
   const { id } = req.params;
-
+  if(Number(id) == 1) return res.status(400).json("can't delete")
   try {
     const sql = "UPDATE USERS SET ACCOUNT_STATUS = 1 WHERE USER_ID = ?"; //0 = online, 1 = offline, 2 = banned
 
