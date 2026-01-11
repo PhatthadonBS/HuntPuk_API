@@ -24,6 +24,11 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL,
     pass: process.env.OTPPASS,
   },
+  pool: true,
+  maxConnections: 1,
+  maxMessages: 20,
+  connectionTimeout: 5000,
+  socketTimeout: 5000,
 });
 
 ///////////////////////////////////  About Mail --Begin--  ////////////////////////////////////////////////////////////////////
@@ -45,7 +50,6 @@ export const OTP_Verify_api = async (req: Request, res: Response) => {
 };
 
 export const OTP_Sender_api = async (req: Request, res: Response) => {
-
   const { email } = req.body;
   try {
     const res1 = await OTP_Sender_fn(email);
@@ -334,7 +338,7 @@ export const updateUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { username, phone_number } = req.body;
   console.log(req.body);
-  
+
   const conn = await dbcon.getConnection();
 
   try {
