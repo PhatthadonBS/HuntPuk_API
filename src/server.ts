@@ -22,7 +22,7 @@ app.use(
 
 app.use(
   rateLimit({
-    windowMs: 60 * 1000,
+    windowMs: 2 * 1000,
     max: 1,
   })
 );
