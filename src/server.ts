@@ -20,13 +20,6 @@ app.use(
 );
 
 
-// app.use(
-//   rateLimit({
-//     windowMs: 2 * 1000,
-//     max: 1,
-//   })
-// );
-
 app.use(express.json());
 
 app.use(bodyParser.text()); //parse body to text

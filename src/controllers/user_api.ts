@@ -282,7 +282,6 @@ export const getUsers_api = async (req: Request, res: Response) => {
 export const getUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    if (Number(id) == 1) return res.status(404).json("not found user");
     const [users] = await dbcon.execute<UserAllGetRes[]>(
       `
       SELECT

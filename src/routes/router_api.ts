@@ -4,6 +4,7 @@ import multer from "multer";
 import * as userController from '../controllers/user_api';
 import * as dormController from '../controllers/dorm_api';
 import * as testApi from '../controllers/testApi'
+import rateLimit from "express-rate-limit";
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -14,6 +15,11 @@ router.get('/', (_req, res) => {
     res.send('HuntPuk_API is running successfully!');
 });
 
+
+const strictLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 5,
+});
 
 const imgTypeUploads = upload.fields([
     {name: "FRONT_DORM_IMG", maxCount: 1},
@@ -49,7 +55,7 @@ router.get('/user/dormOwnerReq', dormController.getPendingOwners_api);//pass
 
 // auth group
 router.post('/auth/login', userController.login);//pass
-router.post('/auth/SendOTP', userController.OTP_Sender_api);//pass
+router.post('/auth/SendOTP', strictLimiter, userController.OTP_Sender_api);//pass
 router.delete('/auth/OTPVerify', userController.OTP_Verify_api);//pass
 router.post('/auth/recoverAccount', userController.recoverAccount_api)//pass
 
