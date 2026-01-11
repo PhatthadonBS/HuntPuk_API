@@ -20,12 +20,12 @@ app.use(
 );
 
 
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-  })
-);
+// app.use(
+//   rateLimit({
+//     windowMs: 15 * 60 * 1000,
+//     max: 100,
+//   })
+// );
 
 app.use(express.json());
 

@@ -45,6 +45,8 @@ export const OTP_Verify_api = async (req: Request, res: Response) => {
 };
 
 export const OTP_Sender_api = async (req: Request, res: Response) => {
+  console.log("here");
+  
   const { email } = req.body;
   try {
     const res1 = await OTP_Sender_fn(email);
