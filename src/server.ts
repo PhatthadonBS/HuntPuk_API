@@ -8,7 +8,7 @@ import os from  "os";
 import rateLimit from "express-rate-limit";
 dotenv.config();
  
-const port = process.env.PORT || 3000;
+const port = Number(process.env.PORT) || 3000;
 const app = express();
 
 app.use(
@@ -52,9 +52,10 @@ if (nets) {
 
 const server = http.createServer(app);
 
-server.listen(port, () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Server is started on http://${ip}:${port}`);
 },).on("error", (error) => {
   console.error(error);
-});
+}); 
 
+ 
