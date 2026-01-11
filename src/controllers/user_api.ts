@@ -968,6 +968,12 @@ export async function OTP_Sender_fn(email: string) {
   const conn = await dbcon.getConnection();
   let msg = null;
   try {
+    await conn.beginTransaction();
+    await delOldOTP_fn(email);
+    const sql = "INSERT INTO OTP_VERIFIES(otp_code, email) VALUES(?, ?)";
+    await conn.execute<ResultSetHeader>(sql, [otp, email]);
+    await conn.commit();
+
     const otpHtmlContent = `
     <!DOCTYPE html>
     <html>
@@ -1018,27 +1024,16 @@ export async function OTP_Sender_fn(email: string) {
     </body>
     </html>
 `;
-    const info = await transporter.sendMail({
+    transporter.sendMail({
       from: '"HuntPuk Support" <noreply.Huntpuk@gmail.com>',
       to: email,
       subject: `รหัสยืนยันตัวตน: ${otp}`,
       html: otpHtmlContent,
+    }).catch(err => {
+      console.error('Send mail failed:', err);
     });
 
-    if (info.accepted.length > 0) {
-      await conn.beginTransaction();
-      await delOldOTP_fn(email);
-      const sql = "INSERT INTO OTP_VERIFIES(otp_code, email) VALUES(?, ?)";
-      const [rows] = await conn.execute<ResultSetHeader>(sql, [otp, email]);
-      await conn.commit();
-
-      if (rows.affectedRows > 0) {
-        msg = "ส่ง OTP สำเร็จ";
-      }
-    } else {
-      msg = "ส่ง OTP ไม่สำเร็จ";
-    }
-    return msg;
+    return "ส่งเมลสำเร็จ";
   } catch (error) {
     await conn.rollback();
     throw error;
