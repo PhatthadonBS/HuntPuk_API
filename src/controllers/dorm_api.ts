@@ -141,7 +141,7 @@ export const getDormById = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
 
   try {
-    // ✅ แก้ไข SQL: JOIN ตาราง USERS เพื่อดึง PHONE_NUMBER
+    // ✅ เพิ่มการดึง do.FACEBOOK, do.INSTAGRAM, do.TELEGRAM, do.X
     const sqlMain = `
             SELECT 
                 d.*, 
@@ -154,10 +154,11 @@ export const getDormById = async (req: Request, res: Response) => {
                 do.FACEBOOK as OWNER_FACEBOOK,
                 do.INSTAGRAM as OWNER_INSTAGRAM,
                 do.TELEGRAM as OWNER_TELEGRAM,
-                u.PHONE_NUMBER as OWNER_PHONE  -- ดึงเบอร์จากตาราง USERS
+                do.X as OWNER_X,
+                u.PHONE_NUMBER as OWNER_PHONE 
             FROM DORMITORIES d
             LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
-            LEFT JOIN USERS u ON do.USER_ID = u.USER_ID  -- ✅ เพิ่ม JOIN นี้
+            LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
             WHERE d.DORM_ID = ?
         `;
@@ -165,20 +166,16 @@ export const getDormById = async (req: Request, res: Response) => {
     const [dormInfo] = await conn.query<RowDataPacket[]>(sqlMain, [id]);
 
     if (dormInfo.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "ไม่พบข้อมูลหอพัก" });
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลหอพัก" });
     }
 
     const mainData = dormInfo[0] as RowDataPacket;
 
-    // 2.2 ดึงรูปภาพแกลลอรี่
     const [images] = await conn.query<RowDataPacket[]>(
       "SELECT IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
       [id]
     );
 
-    // 2.3 ดึงสิ่งอำนวยความสะดวก
     const [facilitiesData] = await conn.query<RowDataPacket[]>(
       `
             SELECT ft.FAC_TYPE_NAME 
@@ -191,7 +188,6 @@ export const getDormById = async (req: Request, res: Response) => {
 
     const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
 
-    // 2.4 ดึงข้อมูลห้องพักและราคา
     const [rooms] = await conn.query<RowDataPacket[]>(
       `
             SELECT rt.ROOM_TYPE_NAME, rp.PRICE
@@ -202,13 +198,12 @@ export const getDormById = async (req: Request, res: Response) => {
       [id]
     );
 
-    // หาราคาต่ำสุด
     const minPrice =
       rooms.length > 0
         ? Math.min(...rooms.map((r: any) => r.PRICE))
         : mainData.start_price || 0;
 
-    // ✅ สร้าง Object ตอบกลับ
+    // ✅ เพิ่มข้อมูลลงใน Object ตอบกลับ
     const responseData = {
       ...mainData,
 
@@ -217,9 +212,13 @@ export const getDormById = async (req: Request, res: Response) => {
       address: mainData.ADDRESS,
       start_price: minPrice,
 
-      // ใช้ค่าที่ดึงมาจาก JOIN
+      // ข้อมูลติดต่อ
       phone: mainData.OWNER_PHONE || "-",
       line: mainData.OWNER_LINE || "-",
+      facebook: mainData.OWNER_FACEBOOK || "-",
+      instagram: mainData.OWNER_INSTAGRAM || "-",
+      telegram: mainData.OWNER_TELEGRAM || "-",
+      x: mainData.OWNER_X || "-",
 
       facilities: facilitiesList,
       gallery: images.map((img: any) => img.IMAGE_PATH),
@@ -232,9 +231,7 @@ export const getDormById = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Server Error: " + error.message });
+    res.status(500).json({ success: false, message: "Server Error: " + error.message });
   } finally {
     conn.release();
   }
