@@ -21,7 +21,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
   try {
     const { search, zone, minPrice, maxPrice } = req.query;
 
-    // 1. Base Query (ตัด GROUP BY และ ORDER BY ออกไปก่อน)
+    // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS แทน ROOM_TYPES โดยตรง
     let sql = `
             SELECT 
                 d.DORM_ID, 
@@ -35,14 +35,13 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 COALESCE(MIN(rp.PRICE), 0) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
-            LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+            LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE d.DORM_STATUS_ID = 1
         `;
 
     const params: any[] = [];
 
-    // 2. ต่อ WHERE Condition (Search & Zone)
     if (search) {
       sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
       params.push(`%${search}%`, `%${search}%`);
@@ -53,10 +52,8 @@ export const getAllDorms = async (req: Request, res: Response) => {
       params.push(zone);
     }
 
-    // 3. ต่อ GROUP BY (ต้องมาหลัง WHERE เสมอ)
     sql += ` GROUP BY d.DORM_ID, dz.ZONE_NAME `;
 
-    // 4. ต่อ HAVING (Price Range)
     const havingClauses = [];
     if (minPrice) {
       havingClauses.push(`start_price >= ?`);
@@ -71,7 +68,6 @@ export const getAllDorms = async (req: Request, res: Response) => {
       sql += ` HAVING ` + havingClauses.join(" AND ");
     }
 
-    // 5. ต่อ ORDER BY (ต้องอยู่ท้ายสุดเสมอ)
     sql += ` ORDER BY d.UPDATE_AT DESC `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
@@ -189,16 +185,17 @@ export const getDormById = async (req: Request, res: Response) => {
 
     const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
 
+// ✅ แก้ไข: เปลี่ยนคำสั่ง SQL ค้นหาห้องพัก ให้ดึงผ่านตารางเชื่อม DORM_ROOMS
     const [rooms] = await dbcon.query<RowDataPacket[]>(
       `
             SELECT rt.ROOM_TYPE_NAME, rp.PRICE
-            FROM ROOM_TYPES rt
-            JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
-            WHERE rt.DORM_ID = ?
+            FROM DORM_ROOMS dr
+            JOIN ROOM_TYPES rt ON dr.ROOM_TYPE_ID = rt.ROOM_TYPE_ID
+            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+            WHERE dr.DORM_ID = ?
         `,
       [id]
     );
-
     const minPrice =
       rooms.length > 0
         ? Math.min(...rooms.map((r: any) => r.PRICE))
@@ -1139,6 +1136,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
 
+    // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS 
     const sql = `
               SELECT 
                   d.DORM_ID, 
@@ -1152,8 +1150,8 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-              LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
-              LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
+              LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+              LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
               GROUP BY d.DORM_ID
               ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
               LIMIT ?
