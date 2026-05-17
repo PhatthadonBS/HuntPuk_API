@@ -7,12 +7,20 @@ export interface User {
     phone?:        string;
     role_id:       number;
     accout_status: number;
+    token?:        string;
 }
 
 export interface UserRegPostReq {
     username: string;
     email:    string;
     password: string;
+    phone:    string;
+}
+
+export interface UserRegSec1Res {
+    username: string;
+    email:    string;
+    password: string; // Hashed
     phone:    string;
 }
 

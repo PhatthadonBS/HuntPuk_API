@@ -5,7 +5,7 @@ import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { deleteFolder, deleteFromGCS, fileUpload } from "./uploads";
 import { getUser, getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
-import { DormRegPostReq, DormRoomImgTypeGetRes, DormRoomTypeReqPostReq, RoomTypeItem, DormDataGetRes, FacOfDormGetRes } from "../models/dorm.model";
+import { DormRegPostReq, DormRoomImgTypeGetRes, DormRoomTypeReqPostReq, RoomTypeItem, DormDataGetRes, FacOfDormGetRes, DormSummary, DormAllGetRes } from "../models/dorm.model";
 import { User } from "../models/user.model";
 
 export type MulterFiles = {
@@ -65,8 +65,9 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     sql += ` ORDER BY d.UPDATE_AT DESC `;
 
-    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
-    res.json({ success: true, data: dorms });
+    const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
+    const response: DormAllGetRes = { success: true, data: dorms };
+    res.json(response);
   } catch (error) {
     console.error("Error in getAllDorms:", error);
     res.status(500).json({ success: false, message: "Server Error" });

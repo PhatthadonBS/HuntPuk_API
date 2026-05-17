@@ -36,6 +36,23 @@ export interface DormRoomTypeReqPostReq {
     perTerm: string | number;
 }
 
+export interface DormSummary extends RowDataPacket {
+    DORM_ID:     number;
+    DORM_NAME:   string;
+    ADDRESS:     string;
+    SCORE:       string;
+    image:       string;
+    zone:        string;
+    lat:         number;
+    lng:        number;
+    start_price: number;
+}
+
+export interface DormAllGetRes {
+    success: boolean;
+    data:    DormSummary[];
+}
+
 export interface DormDataGetRes extends RowDataPacket {
     DORM_ID:          number;
     DORM_OWNER_ID:    number;
@@ -91,3 +108,4 @@ export interface FacOfDormGetRes extends RowDataPacket {
     FAC_TYPE_ICON: string;
     DORM_ID:       number;
 }
+ 

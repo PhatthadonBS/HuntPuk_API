@@ -79,7 +79,7 @@ router.post('/api/dorms/approve', verifyToken, dormController.approveDormReq_api
 router.post('/api/dorms/facility', verifyToken, upload.single("fac"), dormController.addFacility_api);//pass
 router.get('/api/dorms/facilities', dormController.getFacilities_api);//pass
 
-
+ 
 //specific data group
 router.get('/api/spec/user/:id', verifyToken, userController.getUser_api)//pass
 router.get('/api/spec/favorite/:id', verifyToken, userController.getMyFavorites_api)//pass
@@ -95,7 +95,6 @@ router.get('/api/dorms/review/:id', dormController.getReviewsByDormId_api);//pas
 router.get('/api/dorms/:id', dormController.getDormById);//pass
 router.get('/api/dorms/facility/:dorm_id', dormController.getFacilitiesOfDorm_api);//pass
 router.put('/api/dorms/facility/:user_id', verifyToken, upload.single("icon"), dormController.updateFacility_api);//pass
-
 
 
 export default router;
