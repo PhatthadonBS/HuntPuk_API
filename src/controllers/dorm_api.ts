@@ -35,8 +35,8 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 COALESCE(MIN(rp.PRICE), 0) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-            LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
-            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+            LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
             WHERE d.DORM_STATUS_ID = 1
         `;
 
@@ -1152,8 +1152,8 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-              LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
-              LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+              LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+              LEFT JOIN ROOM_PRICES rp ON rt.ROOM_TYPE_ID = rp.ROOM_TYPE_ID
               GROUP BY d.DORM_ID
               ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
               LIMIT ?
