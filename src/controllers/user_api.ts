@@ -6,6 +6,7 @@ import { format, QueryResult, ResultSetHeader, RowDataPacket } from "mysql2";
 import nodemailer from "nodemailer";
 import { OtpVerifyPostRes } from "../models/responses/otp_verify_post_res";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
 import { UserRegPostReq } from "../models/requests/user_reg_post_req";
 import { UserLoginPostRes } from "../models/responses/user_login_post_res";
 import { UserDataPostRes } from "../models/responses/user_data_post_res";
@@ -16,19 +17,16 @@ import { PoolConnection } from "mysql2/promise";
 import { DTOUserDormOwnerReqGetRes } from "../models/DOT/DTO_user_dOwner_post_res";
 import { DormOwnerGetRes } from "../models/responses/dorm_owner_get_res";
 
-dotenv.config();
+dotenv.config(); 
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.OTPPASS,
-  },
-  pool: true,
-  maxConnections: 1,
-  maxMessages: 20,
-  connectionTimeout: 5000,
-  socketTimeout: 5000,
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false, // ใช้ false สำหรับ port 587
+    auth: {
+        user: process.env.BREVO_LOGIN, 
+        pass: process.env.BREVO_API_KEY        
+    }
 });
 
 ///////////////////////////////////  About Mail --Begin--  ////////////////////////////////////////////////////////////////////
@@ -177,11 +175,11 @@ export const registerSec2 = async (req: Request, res: Response) => {
   } finally {
     conn.release();
   }
-};
+};  
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
-
+  console.log(req.body);
   const conn = await dbcon.getConnection();
   try {
     const [user] = await conn.query<UserLoginPostRes[]>(
@@ -204,6 +202,20 @@ export const login = async (req: Request, res: Response) => {
         .json({ success: false, message: "รหัสผ่านไม่ถูกต้อง" });
     }
 
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res
+        .status(500)
+        .json({ success: false, message: "Server Error" });
+    }
+
+    // สร้าง Token
+    const token = jwt.sign(
+      { id: user[0]!.USER_ID, role: user[0]!.ROLE_TYPE_ID },
+      jwtSecret,
+      { expiresIn: "1d" } // หมดอายุใน 1 วัน
+    );
+
     res.json({
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
@@ -214,10 +226,10 @@ export const login = async (req: Request, res: Response) => {
         phone: user[0]!.PHONE_NUMBER,
         role_id: user[0]?.ROLE_TYPE_ID,
         accout_status: user[0]!.ACCOUNT_STATUS,
+        token: token,
       },
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ success: false, message: "Server Error" });
   } finally {
     conn.release();
@@ -884,7 +896,8 @@ export async function resMailSender_fn(
   msg: string
 ) {
   try {
-    const userData = await getUser(email.trim());
+    const [userData] = await getUser(email.trim());
+    if(!userData) return false;
 
     const htmlContent = `
         <!DOCTYPE html>
@@ -906,7 +919,7 @@ export async function resMailSender_fn(
                 <div class="container">
                     <div class="content">
                         <h2 style="margin-top: 0; color: #1f2937;">แจ้งเตือนจากระบบ</h2>
-                        <p>เรียน ${userData[0]?.USERNAME},</p>
+                        <p>เรียนคุณ ${userData.USERNAME},</p>
                         
                         <div class="message-box">
                             ${msg}
@@ -917,7 +930,7 @@ export async function resMailSender_fn(
                     </div>
 
                     <div class="footer">
-                        <p>&copy; ${new Date().getFullYear()} HuntPuk Application. All rights reserved.</p>
+                        <p>&copy; ${new Date().getFullYear()} HuntPuk Team. All rights reserved.</p>
                         <p>อีเมลฉบับนี้เป็นการแจ้งเตือนอัตโนมัติ กรุณาอย่าตอบกลับ</p>
                     </div>
                 </div>
@@ -926,7 +939,7 @@ export async function resMailSender_fn(
         </html>
 `;
     const info = await transporter.sendMail({
-      from: '"HuntPuk Support" <noreply.Huntpuk@gmail.com>',
+      from: '"HuntPuk Team" <no-reply@huntpuk.space>',
       to: email,
       subject: subject,
       html: htmlContent,
@@ -1015,23 +1028,24 @@ export async function OTP_Sender_fn(email: string) {
             </div>
 
             <div class="footer">
-                <p>&copy; ${new Date().getFullYear()} HuntPuk Application. All rights reserved.</p>
+                <p>&copy; ${new Date().getFullYear()} HuntPuk Team. All rights reserved.</p>
                 <p>อีเมลฉบับนี้เป็นการแจ้งเตือนอัตโนมัติ กรุณาอย่าตอบกลับ</p>
             </div>
         </div>
     </body>
     </html>
 `;
-    transporter.sendMail({
-      from: '"HuntPuk Support" <noreply.Huntpuk@gmail.com>',
+    const info = await transporter.sendMail({
+      from: '"HuntPuk Team" <no-reply@huntpuk.space>',
       to: email,
-      subject: `รหัสยืนยันตัวตน: ${otp}`,
+      subject: `รหัสยืนยันตัวตน (OTP)`,
       html: otpHtmlContent,
     }).catch(err => {
       console.error('Send mail failed:', err);
+      return null;
     });
 
-    return "ส่งเมลสำเร็จ";
+    return info && info.accepted.length > 0
   } catch (error) {
     await conn.rollback();
     throw error;

@@ -13,5 +13,10 @@ dist/
 .env
 *.sql
 service-account-key.json
-src/controllers/testApi.ts
 testApi.ts
+
+Dockerfile
+docker-compose.yml
+.dockerignore
+Huntpuk_API_context.txt
+src/controllers/testApi.ts
