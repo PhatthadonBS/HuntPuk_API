@@ -4,18 +4,12 @@ import { dbcon } from "../database/pool";
 import bcrypt from "bcrypt";
 import { format, QueryResult, ResultSetHeader, RowDataPacket } from "mysql2";
 import nodemailer from "nodemailer";
-import { OtpVerifyPostRes } from "../models/responses/otp_verify_post_res";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-import { UserRegPostReq } from "../models/requests/user_reg_post_req";
-import { UserLoginPostRes } from "../models/responses/user_login_post_res";
-import { UserDataPostRes } from "../models/responses/user_data_post_res";
-import { UserAllGetRes } from "../models/responses/user_all_get_res";
-import { fileUpload, deleteFromGCS } from "../controllers/uploads";
-import { UserDormOwnerReqPostReq } from "../models/requests/user_dormOwnerReq_post_req";
 import { PoolConnection } from "mysql2/promise";
-import { DTOUserDormOwnerReqGetRes } from "../models/DOT/DTO_user_dOwner_post_res";
-import { DormOwnerGetRes } from "../models/responses/dorm_owner_get_res";
+import { fileUpload, deleteFromGCS } from "../controllers/uploads";
+import { OtpVerifyPostRes, UserRegPostReq, UserLoginPostRes, UserDataPostRes, UserAllGetRes, UserDormOwnerReqPostReq, DTOUserDormOwnerReqGetRes } from "../models/user.model";
+import { DormOwnerGetRes } from "../models/dorm.model";
 
 dotenv.config(); 
 
