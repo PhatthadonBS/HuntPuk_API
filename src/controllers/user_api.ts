@@ -166,7 +166,7 @@ export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const conn = await dbcon.getConnection();
   try {
-    const [user] = await conn.query<UserLoginPostRes[]>(
+    const [user] = await conn.query<any[]>( // ใช้ any[] หรือ UserLoginPostRes[] 
       "SELECT * FROM USERS WHERE EMAIL = ?",
       [email]
     );
@@ -203,6 +203,7 @@ export const login = async (req: Request, res: Response) => {
     res.json({
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
+      token: token, // <--- เพิ่มตัวแปรนี้ส่งกลับไป
       user: {
         id: user[0]!.USER_ID,
         username: user[0]!.USERNAME,
