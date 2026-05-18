@@ -9,18 +9,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "nm": "npx nodemon src/server.ts"
+    "dev": "nodemon -L --watch src --ext ts --exec ts-node src/server.ts"
   },
   "keywords": [],
   "dependencies": {
     "@google-cloud/storage": "^5.20.4",
-    "@types/bcrypt": "^6.0.0",
-    "@types/cors": "^2.8.19",
-    "@types/dotenv": "^6.1.1",
-    "@types/express": "^5.0.3",
-    "@types/mysql": "^2.15.27",
-    "@types/node": "^24.3.0",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
@@ -30,18 +23,26 @@
     "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
-    "mysql": "^2.18.1",
     "mysql2": "^3.14.4",
-    "nodemailer": "^8.0.6",
-    "typescript": "^5.9.2"
+    "nodemailer": "^8.0.6"
   },
   "devDependencies": {
+<<<<<<< HEAD
+=======
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/dotenv": "^6.1.1",
+    "@types/express": "^5.0.3",
+>>>>>>> e2ca91ba14f915ed9cc33904c4bbb5da7b1579ca
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
+    "@types/mysql": "^2.15.27",
+    "@types/node": "^24.3.0",
     "@types/nodemailer": "^7.0.4",
     "@types/nodemon": "^1.19.6",
     "nodemon": "^3.1.10",
-    "prisma": "^6.19.3",
-    "ts-node-dev": "^2.0.0"
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.2"
   }
 }

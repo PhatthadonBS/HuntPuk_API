@@ -2,16 +2,11 @@
 import { Request, Response } from "express";
 import { dbcon } from "../database/pool";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { DormRegPostReq } from "../models/requests/dorm_reg_post_req";
 import { deleteFolder, deleteFromGCS, fileUpload } from "./uploads";
 import { getUser, getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
-import { DormRoomImgTypeGetRes } from "../models/responses/dorm_roomImgType_get_res";
-import { DormRoomTypeReqPostReq } from "../models/requests/dorm_roomTypeReq_post_req";
-import { RoomTypeItem } from "../models/requests/RoomTypeItem";
-import { User } from "../models/responses/user_data_get_res";
-import { DormDataGetRes } from "../models/responses/dorm_data_get_res";
-import { FacOfDormGetRes } from "../models/responses/fac_ofDorm_get_res";
+import { DormRegPostReq, DormRoomImgTypeGetRes, DormRoomTypeReqPostReq, RoomTypeItem, DormDataGetRes, FacOfDormGetRes, DormSummary, DormAllGetRes } from "../models/dorm.model";
+import { User } from "../models/user.model";
 
 export type MulterFiles = {
   [fieldname: string]: Express.Multer.File[];
@@ -70,8 +65,9 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     sql += ` ORDER BY d.UPDATE_AT DESC `;
 
-    const [dorms] = await dbcon.query<RowDataPacket[]>(sql, params);
-    res.json({ success: true, data: dorms });
+    const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
+    const response: DormAllGetRes = { success: true, data: dorms };
+    res.json(response);
   } catch (error) {
     console.error("Error in getAllDorms:", error);
     res.status(500).json({ success: false, message: "Server Error" });
