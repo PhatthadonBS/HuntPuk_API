@@ -15,7 +15,7 @@ import { UserDormOwnerReqPostReq } from "../models/requests/user_dormOwnerReq_po
 import { PoolConnection } from "mysql2/promise";
 import { DTOUserDormOwnerReqGetRes } from "../models/DOT/DTO_user_dOwner_post_res";
 import { DormOwnerGetRes } from "../models/responses/dorm_owner_get_res";
-
+import jwt from "jsonwebtoken";
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
@@ -184,13 +184,14 @@ export const login = async (req: Request, res: Response) => {
 
   const conn = await dbcon.getConnection();
   try {
-    const [user] = await conn.query<UserLoginPostRes[]>(
+    const [user] = await conn.query<any[]>( // ใช้ any[] หรือ UserLoginPostRes[] 
       "SELECT * FROM USERS WHERE EMAIL = ?",
       [email]
     );
 
-    if (!user) {
-      return res.status(400).json("User not fount");
+    // ✅ ปรับให้เช็คความยาวของ Array ด้วย ป้องกัน Error เวลาหา User ไม่เจอ
+    if (!user || user.length === 0) {
+      return res.status(400).json("User not fount"); 
     }
 
     if (user[0]?.ACCOUNT_STATUS != 0) {
@@ -204,9 +205,21 @@ export const login = async (req: Request, res: Response) => {
         .json({ success: false, message: "รหัสผ่านไม่ถูกต้อง" });
     }
 
+    // ✅ 1. สร้าง JWT Token โดยเก็บ ID และ Role ไว้ข้างใน (ตั้งอายุไว้ 1 วัน)
+    const token = jwt.sign(
+      { 
+        id: user[0]!.USER_ID, 
+        role_id: user[0]!.ROLE_TYPE_ID 
+      }, 
+      process.env.JWT_SECRET || 'huntpuk_secret_key_12345', 
+      { expiresIn: '1d' } 
+    );
+
+    // ✅ 2. แนบ Token ไปกับ Response
     res.json({
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
+      token: token, // <--- เพิ่มตัวแปรนี้ส่งกลับไป
       user: {
         id: user[0]!.USER_ID,
         username: user[0]!.USERNAME,
