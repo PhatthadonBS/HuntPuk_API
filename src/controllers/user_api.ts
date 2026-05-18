@@ -171,18 +171,20 @@ export const login = async (req: Request, res: Response) => {
       [email]
     );
 
+    console.log(user);
+
     if (!user || user.length === 0) {
-      return res.status(400).json("ไม่มีข้อมูลผู้ใช้นี้ในระบบ");
+      return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
 
     if (user[0]?.ACCOUNT_STATUS != 0) {
-      return res.status(400).json("บัญชีผู้ใช้นี้ถูกระงับการใช้งาน");
+      return res.status(400).json({ message: "บัญชีผู้ใช้นี้ถูกระงับการใช้งาน" });
     }
 
     const isMatch = await bcrypt.compare(password, user[0]!.PASSWORD);
     if (!isMatch) {
       return res
-        .status(400)
+        .status(401)
         .json({ success: false, message: "รหัสผ่านไม่ถูกต้อง" });
     }
 
@@ -210,8 +212,7 @@ export const login = async (req: Request, res: Response) => {
         email: user[0]!.EMAIL,
         phone: user[0]!.PHONE_NUMBER,
         role_id: user[0]?.ROLE_TYPE_ID,
-        accout_status: user[0]!.ACCOUNT_STATUS,
-        token: token,
+        accout_status: user[0]!.ACCOUNT_STATUS
       },
     });
   } catch (error) {
