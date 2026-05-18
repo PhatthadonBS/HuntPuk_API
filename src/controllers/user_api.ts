@@ -64,29 +64,41 @@ export const resMailSender_api = async (req: Request, res: Response) => {
 
 export const registerSec1 = async (req: Request, res: Response) => {
   const { username, email, password, phone } = req.body;
+
   const phone_format = /^0[0-9]{9}$/;
+
   if (!phone_format.test(phone)) {
     return res.status(400).json({ message: "รูปเบอร์โทรไม่ถูกต้อง" });
   }
+
   const emailRegex = /^[a-z0-9._%+-]+@([a-z0-9-]+\.)+[a-z]{2,}$/i;
+
   if (!emailRegex.test(email)) {
     return res.status(400).json({ message: "รูปเบอร์อีเมลไม่ถูกต้อง" });
   }
+
   const conn = await dbcon.getConnection();
   try {
     const [dupEmail] = await conn.query<RowDataPacket[]>(
       "SELECT COUNT(USER_ID) as COUNT FROM USERS WHERE EMAIL = ?",
       [email.toString().trim()]
     );
+
     const [dupPhone] = await conn.query<RowDataPacket[]>(
       "SELECT COUNT(USER_ID) as COUNT FROM USERS WHERE PHONE_NUMBER = ?",
       [phone.toString().trim()]
     );
+
     if (dupEmail[0]!["COUNT"] > 0) {
-      return res.status(400).json({ success: false, message: "Email นี้ถูกใช้งานแล้ว" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email นี้ถูกใช้งานแล้ว" });
     }
+
     if (dupPhone[0]!["COUNT"] > 0) {
-      return res.status(400).json({ success: false, message: "เบอร์โทร นี้ถูกใช้งานแล้ว" });
+      return res
+        .status(400)
+        .json({ success: false, message: "เบอร์โทร นี้ถูกใช้งานแล้ว" });
     }
     const hashPassword = await bcrypt.hash(password.toString().trim(), 10);
     const data = {
@@ -105,18 +117,24 @@ export const registerSec1 = async (req: Request, res: Response) => {
 
 export const registerSec2 = async (req: Request, res: Response) => {
   const { userData, verify, admin } = req.body;
+
   const data: UserRegPostReq = {
     username: userData["username"],
     email: userData["email"],
     password: userData["password"],
     phone: userData["phone"],
   };
+
   const regex = /^\$2b\$10\$.{20,}/;
+
   if (!regex.test(data.password))
     return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
   const verStatus = verify;
+
   if (!verStatus && !admin) {
-    return res.status(400).json({ message: "ยังไม่ยืนยัน OTP" });
+    return res.status(400).json({
+      message: "ยังไม่ยืนยัน OTP",
+    });
   }
   const conn = await dbcon.getConnection();
   try {
@@ -127,6 +145,7 @@ export const registerSec2 = async (req: Request, res: Response) => {
         [data.username, data.email, data.password, data.phone]
       );
       conn.commit();
+
       if (rows.affectedRows > 0) {
         return res.status(201).json("สมัครสมาชิกสำเร็จ");
       } else {
@@ -151,25 +170,36 @@ export const login = async (req: Request, res: Response) => {
       "SELECT * FROM USERS WHERE EMAIL = ?",
       [email]
     );
+
     if (!user || user.length === 0) {
       return res.status(400).json("User not fount");
     }
+
     if (user[0]?.ACCOUNT_STATUS != 0) {
       return res.status(400).json("User accout have not permission");
     }
+
     const isMatch = await bcrypt.compare(password, user[0]!.PASSWORD);
     if (!isMatch) {
-      return res.status(400).json({ success: false, message: "รหัสผ่านไม่ถูกต้อง" });
+      return res
+        .status(400)
+        .json({ success: false, message: "รหัสผ่านไม่ถูกต้อง" });
     }
+
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
-      return res.status(500).json({ success: false, message: "Server Error" });
+      return res
+        .status(500)
+        .json({ success: false, message: "Server Error" });
     }
+
+    // สร้าง Token
     const token = jwt.sign(
       { id: user[0]!.USER_ID, role: user[0]!.ROLE_TYPE_ID },
       jwtSecret,
-      { expiresIn: "1d" }
+      { expiresIn: "1d" } // หมดอายุใน 1 วัน
     );
+
     res.json({
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
@@ -193,11 +223,13 @@ export const login = async (req: Request, res: Response) => {
 export const resetPassword_api = async (req: Request, res: Response) => {
   const { email, password, verify } = req.body;
   const conn = await dbcon.getConnection();
+
   const uData = {
     email: email.toString().trim(),
     password: password.toString().trim(),
     verify,
   };
+
   try {
     const userData = await getUser(email);
     if (userData.length > 0 && verify) {
@@ -226,10 +258,17 @@ export const resetPassword_api = async (req: Request, res: Response) => {
 
 //////////////////////////////////   About Authen --End--  ////////////////////////////////////////////////////////////////
 
+//////////////////////////////////   other api --Begin--  ////////////////////////////////////////////////////////////////
+
+//จะส่งไปทั้ง member and owner dorm  ใช้ filter กรองเอาที่ front เด้อ
 export const getUsers_api = async (req: Request, res: Response) => {
   try {
     const users = await getUsers_fn();
-    return res.status(200).json(users);
+    if (users.length > 0) {
+      return res.status(200).json(users);
+    } else {
+      return res.status(200).json([]);
+    }
   } catch (error) {
     res.status(400).json(error);
   }
@@ -256,7 +295,12 @@ export const getMembers_api = async (req: Request, res: Response) => {
   try {
     const users = await getUsers_fn();
     const members = users.filter((member) => member.ROLE_TYPE_ID == 1);
-    return res.status(200).json(members);
+
+    if (members.length > 0) {
+      return res.status(200).json(members);
+    } else {
+      return res.status(200).json([]);
+    }
   } catch (error) {
     res.status(400).json(error);
   }
@@ -266,24 +310,47 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
   try {
     const users = await getUsers_fn();
     const dormOwners = users.filter((member) => member.ROLE_TYPE_ID == 2);
-    return res.status(200).json(dormOwners);
+
+    if (dormOwners.length > 0) {
+      return res.status(200).json(dormOwners);
+    } else {
+      return res.status(200).json([]);
+    }
   } catch (error) {
     res.status(400).json(error);
   }
 };
 
+//ดึงข้อมูลมา ถ้าไม่อันไหนไม่update ให้เอาข้อมูลเก่ายัดใส่แทน (!!!ยัดข้อมูลเก่าตั้งแต่ front เด้อค่อยส่งมา!!!)
 export const updateUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { username, phone_number } = req.body;
+
   const conn = await dbcon.getConnection();
+
   try {
-    const [userData] = await conn.query<UserDataPostRes[]>("SELECT * FROM USERS WHERE USER_ID = ?", [id]);
-    if (!userData || userData.length <= 0) return res.status(404).json("Not found user");
-    if (!username || !phone_number) return res.status(400).json({ message: "Please provide username and phone number" });
+    const [userData] = await conn.query<UserDataPostRes[]>(
+      "SELECT * FROM USERS WHERE USER_ID = ?",
+      [id]
+    );
+    if (!userData || userData.length <= 0)
+      return res.status(404).json("Not found user");
+
+    if (!username || !phone_number) {
+      return res
+        .status(400)
+        .json({ message: "Please provide username and phone number" });
+    }
+
     const phone_format = /^0[0-9]{9}$/;
-    if (!phone_format.test(phone_number)) return res.status(400).json({ message: "รูปเบอร์โทรไม่ถูกต้อง" });
+
+    if (!phone_format.test(phone_number)) {
+      return res.status(400).json({ message: "รูปเบอร์โทรไม่ถูกต้อง" });
+    }
+
     let sql: string;
     let params = [];
+
     if (phone_number == userData[0]!.PHONE_NUMBER) {
       sql = "UPDATE USERS SET USERNAME = ? WHERE USER_ID = ?";
       params.push(username);
@@ -293,10 +360,18 @@ export const updateUser_api = async (req: Request, res: Response) => {
       params.push(phone_number);
     }
     params.push(Number(id));
+
     const [result] = await conn.execute<ResultSetHeader>(sql, [...params]);
-    if (result.affectedRows > 0) return res.status(200).json({ message: "Update user success" });
-    else return res.status(404).json({ message: "User not found or no changes made" });
+
+    if (result.affectedRows > 0) {
+      return res.status(200).json({ message: "Update user success" });
+    } else {
+      return res
+        .status(404)
+        .json({ message: "User not found or no changes made" });
+    }
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Update fail", error });
   } finally {
     conn.release();
@@ -307,9 +382,18 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   if(Number(id) == 1) return res.status(400).json("can't delete")
   try {
-    const [result] = await dbcon.execute<ResultSetHeader>("UPDATE USERS SET ACCOUNT_STATUS = 1 WHERE USER_ID = ?", [id]);
-    if (result.affectedRows > 0) return res.status(200).json({ message: "User account deactivated" });
-    else return res.status(404).json({ message: "User not found" });
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "UPDATE USERS SET ACCOUNT_STATUS = 1 WHERE USER_ID = ?", 
+      [id]
+    );
+
+    if (result.affectedRows > 0) {
+      return res
+        .status(200)
+        .json({ message: "User account deactivated (Soft Deleted)" });
+    } else {
+      return res.status(404).json({ message: "User not found" });
+    }
   } catch (error) {
     res.status(500).json(error);
   }
@@ -318,25 +402,44 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
 export const banAccount_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const [result] = await dbcon.execute<ResultSetHeader>("UPDATE USERS SET ACCOUNT_STATUS = 2 WHERE USER_ID = ?", [id]);
-    if (result.affectedRows > 0) return res.status(200).json({ message: "User account has banned" });
-    else return res.status(404).json({ message: "User not found" });
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "UPDATE USERS SET ACCOUNT_STATUS = 2 WHERE USER_ID = ?", 
+      [id]
+    );
+
+    if (result.affectedRows > 0) {
+      return res.status(200).json({ message: "User account has banned" });
+    } else {
+      return res.status(404).json({ message: "User not found" });
+    }
   } catch (error) {
     res.status(500).json(error);
   }
 };
 
+//ต้องยืนยันตัวตนมาก่อน ค่อยทำ
 export const recoverAccount_api = async (req: Request, res: Response) => {
   const { email, verify } = req.body;
   try {
     if (email && verify) {
       const users = await getUsers_fn();
       const uData = users.find(u => u.EMAIL === email.trim());
-      if (uData?.ACCOUNT_STATUS == 0) return res.status(400).json({ message: "User account is nomal" });
-      const [result] = await dbcon.execute<ResultSetHeader>("UPDATE USERS SET ACCOUNT_STATUS = 0 WHERE EMAIL = ?", [email.trim()]);
-      if (result.affectedRows > 0) return res.status(200).json({ message: "User account is recovered" });
-      else return res.status(404).json({ message: "User not found" });
-    } else return res.status(404).json({ message: "User not found" });
+      if (uData?.ACCOUNT_STATUS == 0)
+        return res.status(400).json({ message: "User account is nomal" });
+
+      const [result] = await dbcon.execute<ResultSetHeader>(
+        "UPDATE USERS SET ACCOUNT_STATUS = 0 WHERE EMAIL = ?", 
+        [email.trim()]
+      );
+
+      if (result.affectedRows > 0) {
+        return res.status(200).json({ message: "User account is recovered" });
+      } else {
+        return res.status(404).json({ message: "User not found" });
+      }
+    } else {
+      return res.status(404).json({ message: "User not found" });
+    }
   } catch (error) {
     res.status(500).json(error);
   }
@@ -345,12 +448,33 @@ export const recoverAccount_api = async (req: Request, res: Response) => {
 export const addFavorite_api = async (req: Request, res: Response) => {
   const { user_id, dorm_id } = req.body;
   try {
-    if (!user_id || !dorm_id) return res.status(400).json({ message: "User ID and Dorm ID are required" });
-    const [result] = await dbcon.execute<ResultSetHeader>("INSERT INTO FAVORITES (USER_ID, DORM_ID) VALUES (?, ?)", [user_id, dorm_id]);
-    if (result.affectedRows > 0) return res.status(201).json({ message: "Added to favorites success" });
-    else return res.status(400).json({ message: "Failed to add favorite" });
+    // 1. ตรวจสอบว่าส่งค่ามาครบไหม
+    if (!user_id || !dorm_id) {
+      return res
+        .status(400)
+        .json({ message: "User ID and Dorm ID are required" });
+    }
+
+    // 2. ทำการ Insert
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "INSERT INTO FAVORITES (USER_ID, DORM_ID) VALUES (?, ?)", 
+      [user_id, dorm_id]
+    );
+
+    if (result.affectedRows > 0) {
+      return res.status(201).json({ message: "Added to favorites success" });
+    } else {
+      return res.status(400).json({ message: "Failed to add favorite" });
+    }
   } catch (error: any) {
-    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ message: "This dorm is already in your favorites" });
+    // 3. ดักจับ Error กรณีข้อมูลซ้ำ (Duplicate Entry)
+    if (error.code === "ER_DUP_ENTRY") {
+      return res
+        .status(409)
+        .json({ message: "This dorm is already in your favorites" });
+    }
+
+    console.error(error);
     return res.status(500).json({ message: "Internal Server Error", error });
   }
 };
@@ -358,11 +482,26 @@ export const addFavorite_api = async (req: Request, res: Response) => {
 export const removeFavorite_api = async (req: Request, res: Response) => {
   const { user_id, dorm_id } = req.body;
   try {
-    if (!user_id || !dorm_id) return res.status(400).json({ message: "User ID and Dorm ID are required" });
-    const [result] = await dbcon.execute<ResultSetHeader>("DELETE FROM FAVORITES WHERE USER_ID = ? AND DORM_ID = ?", [user_id, dorm_id]);
-    if (result.affectedRows > 0) return res.status(200).json({ message: "Removed from favorites success" });
-    else return res.status(404).json({ message: "Favorite item not found" });
+    if (!user_id || !dorm_id) {
+      return res
+        .status(400)
+        .json({ message: "User ID and Dorm ID are required" });
+    }
+
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "DELETE FROM FAVORITES WHERE USER_ID = ? AND DORM_ID = ?", 
+      [user_id, dorm_id]
+    );
+
+    if (result.affectedRows > 0) {
+      return res
+        .status(200)
+        .json({ message: "Removed from favorites success" });
+    } else {
+      return res.status(404).json({ message: "Favorite item not found" });
+    }
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal Server Error", error });
   }
 };
@@ -370,31 +509,105 @@ export const removeFavorite_api = async (req: Request, res: Response) => {
 export const requestDormOwner_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let publicUrl: string | null = null;
+
   try {
-    const { user_id, first_name, last_name, facebook, line, x, instagram, telegram } = req.body;
+    const {
+      user_id,
+      first_name,
+      last_name,
+      facebook,
+      line,
+      x,
+      instagram,
+      telegram,
+    } = req.body;
+
     const file = req.file;
+
     const users = await getUsers_fn();
     const user = users.find(u => u.USER_ID == Number(user_id));
     if (!user) return res.status(400).json("User not found");
-    if (!file) return res.status(400).json({ success: false, message: "Profile image is required" });
-    const [owner] = await conn.execute<DormOwnerGetRes[]>("SELECT * FROM DORM_OWNERS WHERE USER_ID = ?", [user_id]);
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image is required",
+      });
+    }
+
+    const [owner] = await conn.execute<DormOwnerGetRes[]>(
+      "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
+      [user_id]
+    );
     if (owner[0]?.REQ_STATUS == 2) {
-      const [reqRes] = await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?", [user_id]);
-      if (reqRes.affectedRows > 0) return res.status(200).json(" send req agaain success");
+      const [reqRes] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?",
+        [user_id]
+      );
+
+      if (reqRes.affectedRows > 0)
+        return res.status(200).json(" send req agaain success");
       else return res.status(400).json("something error");
     }
-    publicUrl = await fileUpload(file, "users", `${user.USERNAME}_${user.USER_ID}`, null, "profile");
-    const userData: UserDormOwnerReqPostReq = { user_id, first_name, last_name, facebook, instagram, line, telegram, x };
+
+    publicUrl = await fileUpload(
+      file,
+      "users",
+      `${user.USERNAME}_${user.USER_ID}`,
+      null,
+      "profile"
+    );
+
+    const userData: UserDormOwnerReqPostReq = {
+      user_id,
+      first_name,
+      last_name,
+      facebook,
+      instagram,
+      line,
+      telegram,
+      x,
+    };
+
     await conn.beginTransaction();
+
+    // 3. เรียกฟังก์ชัน Insert ลง DB
     const result = await requestDormOwner_fn(conn, userData, publicUrl);
+
     await conn.commit();
-    if (result.affectedRows > 0) return res.status(201).json({ success: true, message: "Request submitted successfully", imageUrl: publicUrl, ownerId: result.insertId });
-    else throw new Error("Insert failed");
+
+    if (result.affectedRows > 0) {
+      return res.status(201).json({
+        success: true,
+        message: "Request submitted successfully",
+        imageUrl: publicUrl,
+        ownerId: result.insertId,
+      });
+    } else {
+      throw new Error("Insert failed with no affected rows");
+    }
   } catch (error: any) {
     await conn.rollback();
-    if (publicUrl) await deleteFromGCS(publicUrl).catch(err => console.error(err));
-    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ success: false, message: "Duplicate entry" });
-    return res.status(500).json({ success: false, message: "Server Error", error: error.message });
+
+    if (publicUrl) {
+      await deleteFromGCS(publicUrl).catch((err) =>
+        console.error("Failed to delete image:", err)
+      );
+    }
+
+    console.error("Request Owner Error:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message: "คุณได้ส่งคำขอไปแล้ว หรือเป็นเจ้าของหอพักอยู่แล้ว",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -403,19 +616,32 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
 export const approveDormOwner = async (req: Request, res: Response) => {
   const { user_id, approve_status, msg } = req.body;
   const conn = await dbcon.getConnection();
+
   try {
     await conn.beginTransaction();
     const ownerData = await getDormOwners_fn(conn, Number(user_id));
     if (ownerData.length === 0) return res.status(400).json("user not found");
     const user = ownerData[0] as any;
-    const status = approve_status == true ? 1 : 2;
-    const [result] = await conn.execute<ResultSetHeader>("UPDATE DORM_OWNERS SET REQ_STATUS = ? WHERE USER_ID = ?;", [status, user_id]);
+
+    const status = approve_status == true ? 1 : 2; // 1 = accept, 2 = reject
+
+    const [result] = await conn.execute<ResultSetHeader>(
+      "UPDATE DORM_OWNERS SET REQ_STATUS = ? WHERE USER_ID = ?;",
+      [status, user_id]
+    );
     await conn.commit();
+
     const subject = "รายงานการส่งคำร้องขอสิทธิ์เป็นเจ้าของหอพัก";
-    let content = approve_status ? "คำร้องของคุณได้รับการอนุมัติ" : `คำร้องของคุณไม่ผ่านการพิจารณา เนื่องจาก: ${msg}`;
+    let content = approve_status 
+        ? "ขอแสดงความยินดี คำร้องขอสิทธิ์เป็นเจ้าของหอพักของคุณได้รับการอนุมัติเรียบร้อยแล้ว" 
+        : `คำร้องขอสิทธิ์เป็นเจ้าของหอพักของคุณไม่ผ่านการพิจารณา เนื่องจาก: ${msg}`;
+    
     const info = await resMailSender_fn(user.EMAIL, subject, content);
-    if (info) return res.status(200).json("sent mail Success");
-    else return res.status(400).json("sent mail fail");
+    if (info) {
+      return res.status(200).json("sent mail Success");
+    } else {
+      return res.status(400).json("sent mail fail");
+    }
   } catch (error) {
     await conn.rollback();
     res.status(400).json(error);
@@ -427,9 +653,20 @@ export const approveDormOwner = async (req: Request, res: Response) => {
 export const getMyFavorites_api = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    if (!id) return res.status(400).json({ message: "User ID is required" });
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
     const sql = `
-            SELECT D.DORM_ID AS DORMID, D.DORM_NAME AS DORMNAME, CONCAT(DO.FIRST_NAME, ' ', DO.LAST_NAME) AS OWNERNAME, D.UPDATE_AT AS UPDATEDAT, D.ADDRESS AS ADDRESS, D.FRONT_DORM_IMAGE AS COVERIMAGE, D.SCORE AS SCORE, DS.DORM_STATUS_NAME
+            SELECT 
+                D.DORM_ID AS DORMID,
+                D.DORM_NAME AS DORMNAME,
+                CONCAT(DO.FIRST_NAME, ' ', DO.LAST_NAME) AS OWNERNAME,
+                D.UPDATE_AT AS UPDATEDAT,
+                D.ADDRESS AS ADDRESS,
+                D.FRONT_DORM_IMAGE AS COVERIMAGE,
+                D.SCORE AS SCORE,
+                DS.DORM_STATUS_NAME
             FROM FAVORITES F
             JOIN DORMITORIES D ON F.DORM_ID = D.DORM_ID
             JOIN DORM_OWNERS DO ON D.DORM_OWNER_ID = DO.DORM_OWNER_ID
@@ -437,12 +674,19 @@ export const getMyFavorites_api = async (req: Request, res: Response) => {
             WHERE F.USER_ID = ?
             ORDER BY F.FAV_ID DESC
         `;
+
     const [rows] = await dbcon.query<RowDataPacket[]>(sql, [id]);
     return res.status(200).json(rows);
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Error fetching favorites:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
+
+//////////////////////////////////   other api --End--  ////////////////////////////////////////////////////////////////
 
 //////////////////////////////////   About Method --Begin--  ////////////////////////////////////////////////////////////////
 
@@ -457,15 +701,38 @@ export async function getDormOwners_fn(conn: PoolConnection, uid: number) {
   } catch (error) { throw error; }
 }
 
-export async function requestDormOwner_fn(conn: PoolConnection, userData: UserDormOwnerReqPostReq, publicUrl: string) {
+export async function requestDormOwner_fn(
+  conn: PoolConnection,
+  userData: UserDormOwnerReqPostReq,
+  publicUrl: string
+) {
   const lineLink = normalizeLineID(userData?.line);
   const telegramLink = normalizeThaiPhone(userData?.telegram);
+
   try {
-    const sql = `INSERT INTO DORM_OWNERS (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, PROFILE_IMAGE) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const params = [userData.user_id, userData.first_name, userData.last_name, userData.facebook || null, lineLink || null, userData.x || null, userData.instagram || null, telegramLink || null, publicUrl];
+    const sql = `
+          INSERT INTO DORM_OWNERS 
+          (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, PROFILE_IMAGE)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+    const params = [
+      userData.user_id,
+      userData.first_name,
+      userData.last_name,
+      userData.facebook || null,
+      lineLink || null,
+      userData.x || null,
+      userData.instagram || null,
+      telegramLink || null,
+      publicUrl,
+    ];
+
     const [result] = await conn.execute<ResultSetHeader>(sql, params);
     return result;
-  } catch (error) { throw error; }
+  } catch (error) {
+    throw error;
+  }
 }
 
 export function normalizeLineID(lineId: string | null): string | null {
@@ -482,12 +749,17 @@ export function normalizeThaiPhone(input: string | null): string | null {
 }
 
 export async function getUser(email: string) {
-  const [rows] = await dbcon.query<UserDataPostRes[]>("SELECT * FROM USERS WHERE EMAIL = ?", [email.trim()]);
+  const [rows] = await dbcon.query<UserDataPostRes[]>(
+    "SELECT * FROM USERS WHERE EMAIL = ?", 
+    [email.trim()]
+  );
   return rows;
 }
 
 export async function getUsers_fn() {
-  const [users] = await dbcon.execute<UserAllGetRes[]>(`SELECT USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS FROM USERS WHERE ROLE_TYPE_ID IN (1, 2)`);
+  const [users] = await dbcon.execute<UserAllGetRes[]>(
+    `SELECT USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS FROM USERS WHERE ROLE_TYPE_ID IN (1, 2)`
+  );
   return users;
 }
 
@@ -497,11 +769,49 @@ export async function resMailSender_fn(email: string, subject: string, msg: stri
     if(users.length === 0) return false;
     const userData = users[0]!;
     
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            .body-wrap { background-color: #f6f9fc; padding: 60px 0; }
+            .container { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; }
+            .card { background-color: #ffffff; border-radius: 16px; padding: 48px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #eef2f7; }
+            .header { margin-bottom: 40px; text-align: left; }
+            .logo { font-size: 26px; font-weight: 800; color: #2563eb; letter-spacing: -0.03em; margin: 0; }
+            .greeting { font-size: 18px; color: #1e293b; font-weight: 600; margin-bottom: 20px; }
+            .message-box { font-size: 16px; line-height: 1.8; color: #475569; padding: 32px; background-color: #f8fafc; border-radius: 12px; border-left: 5px solid #2563eb; margin-bottom: 40px; }
+            .footer { text-align: center; font-size: 13px; color: #94a3b8; margin-top: 40px; line-height: 1.6; }
+            .divider { height: 1px; background-color: #f1f5f9; margin: 0; }
+        </style>
+    </head>
+    <body>
+        <div class="body-wrap">
+            <div class="container">
+                <div class="card">
+                    <div class="header">
+                        <h1 class="logo">HuntPuk</h1>
+                    </div>
+                    <div class="greeting">สวัสดีคุณ ${userData.USERNAME},</div>
+                    <div class="message-box">${msg}</div>
+                    <div class="divider"></div>
+                    <div class="footer">
+                        &copy; ${new Date().getFullYear()} HuntPuk System. All rights reserved.<br>
+                        อีเมลฉบับนี้เป็นการแจ้งเตือนอัตโนมัติ โปรดอย่าตอบกลับ
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
     const payload = {
         sender: { name: "HuntPuk Team", email: "no-reply@huntpuk.space" },
         to: [{ email: email }],
         subject: subject,
-        htmlContent: `<html><body><h2>แจ้งเตือนจากระบบ</h2><p>เรียนคุณ ${userData.USERNAME},</p><div style="padding:20px; background:#f8fafc; border-left:4px solid #2563EB;">${msg}</div><p>ทีมงาน HuntPuk</p></body></html>`
+        htmlContent: htmlContent
     };
 
     const response = await axios.post(BREVO_URL, payload, {
@@ -531,11 +841,51 @@ export async function OTP_Sender_fn(email: string) {
     await delOldOTP_fn(email);
     await dbcon.execute("INSERT INTO OTP_VERIFIES(otp_code, email) VALUES(?, ?)", [otp, email]);
     
+    const otpHtmlContent = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            .body-wrap { background-color: #f6f9fc; padding: 70px 0; }
+            .container { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; }
+            .card { background-color: #ffffff; border-radius: 24px; padding: 60px 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); border: 1px solid #eef2f7; text-align: center; }
+            .logo { font-size: 32px; font-weight: 900; color: #2563eb; letter-spacing: -0.04em; margin-bottom: 50px; }
+            .title { font-size: 24px; color: #0f172a; font-weight: 700; margin-bottom: 12px; }
+            .subtitle { font-size: 15px; color: #64748b; margin-bottom: 44px; line-height: 1.6; }
+            .otp-container { background-color: #f8fafc; border-radius: 20px; padding: 40px; margin-bottom: 40px; border: 2px solid #f1f5f9; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+            .otp-code { font-size: 56px; font-weight: 800; color: #1e293b; letter-spacing: 0.3em; font-family: 'Monaco', 'Courier New', monospace; margin: 0; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .expiry { font-size: 14px; color: #ef4444; font-weight: 600; margin-bottom: 40px; display: inline-block; padding: 6px 16px; background-color: #fef2f2; border-radius: 9999px; }
+            .footer { font-size: 12px; color: #94a3b8; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 32px; }
+        </style>
+    </head>
+    <body>
+        <div class="body-wrap">
+            <div class="container">
+                <div class="card">
+                    <div class="logo">HuntPuk</div>
+                    <div class="title">รหัสยืนยันตัวตน</div>
+                    <div class="subtitle">โปรดใช้รหัส OTP ด้านล่างเพื่อยืนยันการทำรายการของคุณ</div>
+                    <div class="otp-container">
+                        <p class="otp-code">${otp}</p>
+                    </div>
+                    <div class="expiry">รหัสหมดอายุใน 3 นาที</div>
+                    <div class="footer">
+                        หากคุณไม่ได้ร้องขอรหัสนี้ โปรดเพิกเฉยต่ออีเมลฉบับนี้<br>
+                        &copy; ${new Date().getFullYear()} HuntPuk. All rights reserved.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
     const payload = {
         sender: { name: "HuntPuk Team", email: "no-reply@huntpuk.space" },
         to: [{ email: email }],
-        subject: "รหัสยืนยันตัวตน (OTP)",
-        htmlContent: `<html><body><p>รหัสยืนยันตัวตน (OTP) ของคุณคือ</p><div style="font-size:40px; font-weight:bold; color:#2563EB;">${otp}</div><p>รหัสนี้จะหมดอายุภายใน 3 นาที</p></body></html>`
+        subject: "รหัสยืนยันตัวตน (OTP) สำหรับ HuntPuk",
+        htmlContent: otpHtmlContent
     };
 
     const response = await axios.post(BREVO_URL, payload, {
