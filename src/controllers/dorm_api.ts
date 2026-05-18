@@ -70,7 +70,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
     res.json(response);
   } catch (error) {
     console.error("Error in getAllDorms:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -124,7 +124,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
     console.error("Error getAllDorms_Admin:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ", error: error.message });
   }
 };
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (อัปเดตใหม่ ทนทานต่อการดึงรัวๆ) ---
@@ -222,7 +222,7 @@ export const getDormById = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
-    res.status(500).json({ success: false, message: "Server Error: " + error.message });
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ", error: error.message });
   }
 };
 
@@ -233,7 +233,7 @@ export const getAllZones = async (req: Request, res: Response) => {
     res.json({ success: true, data: zones });
   } catch (error) {
     console.error("Error in getAllZones:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -244,11 +244,11 @@ export const addFacility_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let icon_url = null;
   if (!file || !fac_name || !uid)
-    return res.status(400).json("not enough data");
+    return res.status(400).json({ success: false, message: "ข้อมูลไม่ครบถ้วน" });
 
   try {
     const user = await (await getUsers_fn()).filter((u) => u.USER_ID == uid);
-    if (user.length < 1) return res.status(404).json("user notfound");
+    if (user.length < 1) return res.status(404).json({ success: false, message: "ไม่พบผู้ใช้งาน" });
 
     const [limitAdd] = await conn.execute<RowDataPacket[]>(
       "SELECT COUNT(ADD_BY) count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
@@ -256,7 +256,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
 
     if (limitAdd[0]!["count"] >= 3)
-      return res.status(200).json("u have limit for add facility");
+      return res.status(200).json({ success: false, message: "ขีดจำกัดในการเพิ่มสิ่งอำนวยความสะดวกเต็มแล้ว" });
 
     const [dupFac] = await conn.execute<RowDataPacket[]>(
       "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
@@ -264,7 +264,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
 
     if (dupFac[0]!["count"] > 0)
-      return res.status(200).json("duplicate facility name");
+      return res.status(200).json({ success: false, message: "ชื่อสิ่งอำนวยความสะดวกซ้ำ" });
     icon_url = await fileUpload(
       file,
       "users",
@@ -280,13 +280,13 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
     conn.commit();
     if (result.affectedRows > 0) {
-      return res.status(201).json("add fac success");
+      return res.status(201).json({ success: true, message: "เพิ่มสิ่งอำนวยความสะดวกสำเร็จ" });
     } else {
-      return res.status(400).json("add fac fail");
+      return res.status(400).json({ success: false, message: "เพิ่มสิ่งอำนวยความสะดวกไม่สำเร็จ" });
     }
   } catch (error: any) {
     conn.rollback();
-    res.status(400).json(error.message);
+    return res.status(400).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ", error: error.message });
   } finally {
     conn.release();
   }
@@ -319,7 +319,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
   } catch (e) {
     return res.status(400).json({
       success: false,
-      message: "Invalid JSON format for facilities or roomTypes",
+      message: "ข้อมูลสิ่งอำนวยความสะดวกหรือประเภทห้องพักไม่ถูกต้อง",
     });
   }
 
@@ -498,7 +498,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
     await conn.commit();
     res.status(201).json({
       success: true,
-      message: "Dormitory created successfully",
+      message: "ลงทะเบียนหอพักสำเร็จ",
       dormId,
     });
   } catch (error: any) {
@@ -507,7 +507,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to create dormitory",
+      message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก",
       error: error.message,
     });
   } finally {
@@ -543,13 +543,13 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     await updateGalleryImages_fn(dormId, body.name, files, ownerId, conn);
 
     await conn.commit();
-    res.json({ success: true, message: "Dormitory updated successfully" });
+    res.json({ success: true, message: "อัปเดตข้อมูลหอพักสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
     console.error("Update Error:", error);
     res
       .status(500)
-      .json({ success: false, message: "Update failed", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการอัปเดตข้อมูลหอพัก", error: error.message });
   } finally {
     conn.release();
   }
@@ -850,18 +850,18 @@ export const removeDorm_api = async (req: Request, res: Response) => {
     if (result.affectedRows === 0) {
       return res
         .status(404)
-        .json({ success: false, message: "Dormitory not found" });
+        .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
     }
 
     res.json({
       success: true,
-      message: "Dormitory status changed to Removed (2)",
+      message: "สถานะหอพักถูกเปลี่ยนเป็นถูกลบ",
     });
   } catch (error: any) {
     console.error("Remove Dorm Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to remove dorm",
+      message: "เกิดข้อผิดพลาดในการลบหอพัก",
       error: error.message,
     });
   } finally {
@@ -882,18 +882,18 @@ export const restoreDorm_api = async (req: Request, res: Response) => {
     if (result.affectedRows === 0) {
       return res
         .status(404)
-        .json({ success: false, message: "Dormitory not found" });
+        .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
     }
 
     res.json({
       success: true,
-      message: "Dormitory status restored to Active (1)",
+      message: "สถานะหอพักถูกเปลี่ยนเป็นกำลังใช้งาน",
     });
   } catch (error: any) {
-    console.error("Restore Dorm Error:", error);
+    console.error("เกิดข้อผิดพลาดในการกู้คืนข้อมูลหอพัก:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to restore dorm",
+      message: "เกิดข้อผิดพลาดในการกู้คืนข้อมูลหอพัก",
       error: error.message,
     });
   } finally {
@@ -906,7 +906,7 @@ export const addReview_api = async (req: Request, res: Response) => {
   if (!user_id || !dorm_id || score === undefined) {
     return res
       .status(400)
-      .json({ success: false, message: "Missing required fields" });
+      .json({ success: false, message: "ข้อมูลไม่ครบถ้วน" });
   }
 
   const conn = await dbcon.getConnection();
@@ -941,7 +941,7 @@ export const addReview_api = async (req: Request, res: Response) => {
     await conn.commit();
     res.status(201).json({
       success: true,
-      message: "Review added successfully",
+      message: "รีวิวถูกเพิ่มเรียบร้อยแล้ว",
       newDormScore: newScore,
     });
   } catch (error: any) {
@@ -995,7 +995,7 @@ export const deleteReview_api = async (req: Request, res: Response) => {
     await conn.commit();
     res.json({
       success: true,
-      message: "Review deleted successfully",
+      message: "รีวิวถูกลบเรียบร้อยแล้ว",
       newDormScore: newScore,
     });
   } catch (error: any) {
@@ -1003,7 +1003,7 @@ export const deleteReview_api = async (req: Request, res: Response) => {
     console.error("Delete Review Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to delete review",
+      message: "เกิดข้อผิดพลาดในการลบรีวิว",
       error: error.message,
     });
   } finally {
@@ -1045,10 +1045,10 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
       data: dorms,
     });
   } catch (error: any) {
-    console.error("Get My Dorms Error:", error);
+    console.error("เกิดข้อผิดพลาดในการดึงข้อมูลหอพัก:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพัก", error: error.message });
   }
 };
 
@@ -1082,7 +1082,7 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
     console.error("Get Reviews Error:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลรีวิว", error: error.message });
   }
 };
 
@@ -1113,7 +1113,7 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
     console.error("Get Pending Owners Error:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลเจ้าของหอพักที่รอการอนุมัติ", error: error.message });
   }
 };
 
@@ -1153,7 +1153,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     console.error("Get Popular Dorms Error:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักยอดนิยม", error: error.message });
   }
 };
 
@@ -1181,7 +1181,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
 
     if (dormInfo.length === 0) {
       await conn.rollback();
-      return res.status(404).json("Dormitory not found");
+      return res.status(404).json("ไม่พบข้อมูลหอพักนี้ในระบบ");
     }
 
     const targetEmail = dormInfo[0]!.EMAIL;
@@ -1211,18 +1211,18 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
         info = await resMailSender_fn(targetEmail, subject, content);
       }
     } else {
-      return res.status(400).json("Update failed (No affected rows)");
+      return res.status(400).json("อัปเดตสถานะคำร้องล้มเหลว");
     }
 
     if (info) {
-      return res.status(200).json("sent mail Success");
+      return res.status(200).json("ส่งอีเมลสำเร็จ");
     } else {
-      return res.status(400).json("sent mail fail");
+      return res.status(400).json("ส่งอีเมลไม่สำเร็จ");
     }
   } catch (error) {
     await conn.rollback();
     console.error(error);
-    res.status(400).json(error);
+    res.status(400).json({ message: "เกิดข้อผิดพลาดในการอัปเดตสถานะคำร้อง" });
   } finally {
     conn.release();
   }
@@ -1263,10 +1263,10 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       data: dorms,
     });
   } catch (error: any) {
-    console.error("Get Pending Dorm Req Error:", error);
+    console.error("เกิดข้อผิดพลาดในการดึงข้อมูลคำร้องขอหอพักที่รอการอนุมัติ:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server Error", error: error.message });
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลคำร้องขอหอพักที่รอการอนุมัติ", error: error.message });
   }
 };
 
@@ -1279,7 +1279,7 @@ export const getFacilities_api = async (req: Request, res: Response) => {
     if (facs.length > 0) {
       return res.status(200).json(facs);
     } else {
-      return res.status(404).json("Have not facilities");
+      return res.status(404).json("ไม่พบข้อมูลสิ่งอำนวยความสะดวกในระบบ");
     }
   } catch (error: any) {
     res.status(500).json({ message: "Server Error", error: error.message });
@@ -1302,10 +1302,10 @@ export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
     if (facs.length > 0) {
       return res.status(200).json(facs);
     } else {
-      return res.status(404).json("Have not facilities");
+      return res.status(404).json("ไม่พบข้อมูลสิ่งอำนวยความสะดวกในระบบ");
     }
   } catch (error: any) {
-    res.status(500).json({ message: "Server Error", error: error.message });
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลสิ่งอำนวยความสะดวก", error: error.message });
   } finally {
     conn.release();
   }
@@ -1319,14 +1319,14 @@ export const updateFacility_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let iconUrl: string = "";
   try {
-    if (!fac_id) return res.status(400).json("not found facility");
+    if (!fac_id) return res.status(400).json("ไม่พบสิ่งอำนวยความสะดวกนี้ในระบบ");
     let user: string;
 
     if (Number(uid) == 1) {
       user = "admin";
     } else {
       const [userData] = (await getUsers_fn()).filter((u) => u.USER_ID == uid);
-      if (!userData) return res.status(400).json("User not found");
+      if (!userData) return res.status(400).json("ไม่พบข้อมูลผู้ใช้ในระบบ");
       user = `${userData.USERNAME}_${userData.USER_ID}`;
     }
 
@@ -1345,7 +1345,7 @@ export const updateFacility_api = async (req: Request, res: Response) => {
     }
 
     if (sql.length === 0)
-      return res.status(200).json("Have not facility update");
+      return res.status(200).json("ไม่มีการอัปเดตสิ่งอำนวยความสะดวกนี้");
 
     const [facs] = await conn.query<ResultSetHeader>(
       `UPDATE FACILITIES_TYPES SET ${sql.join(", ")} WHERE FAC_TYPE_ID = ?`,
@@ -1356,7 +1356,7 @@ export const updateFacility_api = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     await deleteFromGCS(iconUrl);
-    res.status(500).json({ message: "Server Error", error: error.message });
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปเดตสิ่งอำนวยความสะดวก", error: error.message });
   } finally {
     conn.release();
   }

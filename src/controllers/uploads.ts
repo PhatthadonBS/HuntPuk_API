@@ -11,11 +11,11 @@ export async function fileUpload(
 ) {
   const allowed = ["image/jpeg", "image/png"];
   if (!allowed.includes(file.mimetype)) {
-    throw new Error("Invalid file type");
+    throw new Error("ข้อผิดพลาด: ประเภทไฟล์ไม่ถูกต้อง (รองรับเฉพาะ JPEG และ PNG)");
   }
 
   if (mainFolder !== "users" && mainFolder !== "dorms") {
-    throw new Error("Invalid mainFolder: Must be 'users' or 'dorms'");
+    throw new Error("ข้อผิดพลาด: mainFolder ต้องเป็น 'users' หรือ 'dorms'");
   }
 
   if (
@@ -24,7 +24,7 @@ export async function fileUpload(
     subFolder !== "room_imgs" &&
     subFolder !== "other_imgs"
   ) {
-    throw new Error("Invalid subFolder");
+    throw new Error("ข้อผิดพลาด: subFolder ไม่ถูกต้อง");
   }
 
   return new Promise<string>((resolve, rejects) => {
@@ -90,6 +90,6 @@ export async function deleteFolder(folderName: string) {
 
     console.log(`ลบ${folderToDelete} เรียบร้อยแล้ว`);
   } catch (error) {
-    throw error;
+    throw new Error("ข้อผิดพลาด: ไม่สามารถลบโฟลเดอร์ได้");
   }
 }
