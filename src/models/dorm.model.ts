@@ -89,9 +89,9 @@ export interface DormOwnerGetRes extends RowDataPacket {
     LAST_NAME:     string;
     FACEBOOK:      string;
     LINE:          string;
-    X:             null;
+    X:             string | null;
     INSTAGRAM:     string;
-    TELEGRAM:      null;
+    TELEGRAM:      string | null;
     REQ_STATUS:    number;
     PROFILE_IMAGE: string;
 }

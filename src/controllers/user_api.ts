@@ -8,7 +8,7 @@ import jwt from "jsonwebtoken";
 import axios from "axios";
 import { PoolConnection } from "mysql2/promise";
 import { fileUpload, deleteFromGCS } from "../controllers/uploads";
-import { OtpVerifyPostRes, UserRegPostReq, UserLoginPostRes, UserDataPostRes, UserAllGetRes, UserDormOwnerReqPostReq, DTOUserDormOwnerReqGetRes, UserRegSec1Res, UserLoggedInPostRes } from "../models/user.model";
+import { OtpVerifyPostRes, UserRegPostReq, UserDataPostRes, UserAllGetRes, UserDormOwnerReqPostReq, DTOUserDormOwnerReqGetRes, UserLoggedInPostRes } from "../models/user.model";
 import { DormOwnerGetRes } from "../models/dorm.model";
 
 dotenv.config(); 
@@ -166,14 +166,12 @@ export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const conn = await dbcon.getConnection();
   try {
-    const [user] = await conn.query<any[]>( // ใช้ any[] หรือ UserLoginPostRes[] 
+    const [user] = await conn.query<UserDataPostRes[]>(
       "SELECT * FROM USERS WHERE EMAIL = ?",
       [email]
     );
 
-    console.log(user);
-
-    if (!user || user.length === 0) {
+    if (user.length <= 0) {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
 
@@ -197,9 +195,9 @@ export const login = async (req: Request, res: Response) => {
 
     // สร้าง Token
     const token = jwt.sign(
-      { id: user[0]!.USER_ID, role: user[0]!.ROLE_TYPE_ID },
+      { id: user[0].USER_ID, role: user[0].ROLE_TYPE_ID, status: user[0].ACCOUNT_STATUS }, // Payload
       jwtSecret,
-      { expiresIn: "1d" } // หมดอายุใน 1 วัน
+      { expiresIn: "2h" } // หมดอายุใน 2 ชั่วโมง
     );
 
     res.json({

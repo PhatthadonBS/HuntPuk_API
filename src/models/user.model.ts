@@ -17,23 +17,6 @@ export interface UserRegPostReq {
     phone:    string;
 }
 
-export interface UserRegSec1Res {
-    username: string;
-    email:    string;
-    password: string; // Hashed
-    phone:    string;
-}
-
-export interface UserLoginPostRes extends RowDataPacket {
-    USER_ID:        number;
-    USERNAME:       string;
-    EMAIL:          string;
-    PASSWORD:       string;
-    PHONE_NUMBER:   string;
-    ROLE_TYPE_ID:   number;
-    ACCOUNT_STATUS: number;
-}
-
 export interface UserDataPostRes extends RowDataPacket {
     USER_ID:        number;
     USERNAME:       string;
