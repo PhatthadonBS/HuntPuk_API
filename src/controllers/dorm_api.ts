@@ -228,12 +228,21 @@ export const getDormById = async (req: Request, res: Response) => {
 
 export const getAllZones = async (req: Request, res: Response) => {
   try {
-    const sql = `SELECT * FROM DORM_ZONES ORDER BY ZONE_ID ASC`;
+    // ✅ เปลี่ยนจาก SELECT * เป็นการแกะ lat, lng ออกจากจุด POINT 
+    const sql = `
+      SELECT 
+        ZONE_ID, 
+        ZONE_NAME, 
+        ST_X(COORDINATES) as lat, 
+        ST_Y(COORDINATES) as lng 
+      FROM DORM_ZONES 
+      ORDER BY ZONE_ID ASC
+    `;
     const [zones] = await dbcon.query<RowDataPacket[]>(sql);
     res.json({ success: true, data: zones });
   } catch (error) {
     console.error("Error in getAllZones:", error);
-    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
