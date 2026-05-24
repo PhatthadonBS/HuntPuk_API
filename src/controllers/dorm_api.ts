@@ -14,7 +14,7 @@ export type MulterFiles = {
 
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
-    const { search, zone, minPrice, maxPrice } = req.query;
+    const { search, zone, minPrice, maxPrice, lat, lng, radius } = req.query;
 
     // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS แทน ROOM_TYPES โดยตรง
     let sql = `
@@ -45,6 +45,13 @@ export const getAllDorms = async (req: Request, res: Response) => {
     if (zone) {
       sql += ` AND dz.ZONE_NAME = ? `;
       params.push(zone);
+    }
+
+    if (lat && lng && radius) {
+      // Calculate distance in meters using ST_Distance_Sphere (MySQL expects POINT(longitude, latitude))
+      // Moving this to WHERE clause before GROUP BY fixes the 'Unknown column' error and improves performance
+      sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
+      params.push(Number(lng), Number(lat), Number(radius) * 1000);
     }
 
     sql += ` GROUP BY d.DORM_ID, dz.ZONE_NAME `;
@@ -1187,7 +1194,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
        WHERE d.DORM_ID = ?`,
       [data.dormId]
     );
-
+ 
     if (dormInfo.length === 0) {
       await conn.rollback();
       return res.status(404).json("ไม่พบข้อมูลหอพักนี้ในระบบ");
