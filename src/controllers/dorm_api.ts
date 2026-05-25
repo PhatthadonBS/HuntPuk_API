@@ -97,6 +97,7 @@ export async function getDormById_fn(did: number, conn: PoolConnection) {
 
 export const getAllDorms_Admin = async (req: Request, res: Response) => {
   try {
+    // ✅ เพิ่มการ Join ตาราง Zone และ ราคา (DORM_ROOMS, ROOM_PRICES) เข้ามาด้วย
     const sql = `
       SELECT 
         d.DORM_ID, 
@@ -105,20 +106,22 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         
-        -- 1. ข้อมูลชื่อ จากตาราง DORM_OWNERS (do)
+        dz.ZONE_NAME,
+        COALESCE(MIN(rp.PRICE), 0) AS start_price,
+
         do.FIRST_NAME,
         do.LAST_NAME,
-        
-        -- 2. ข้อมูลติดต่อ จากตาราง USERS (u)
         u.EMAIL,
         u.PHONE_NUMBER
 
       FROM DORMITORIES d
-      -- Join หาเจ้าของหอ
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
-      -- ✅ ต้อง Join USERS ด้วย เพื่อเอา Email และ Phone
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+      LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
       
+      GROUP BY d.DORM_ID
       ORDER BY d.DORM_ID DESC
     `;
 
