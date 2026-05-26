@@ -141,9 +141,6 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (อัปเดตใหม่ ทนทานต่อการดึงรัวๆ) ---
 export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  
-  // ❌ ลบ const conn = await dbcon.getConnection(); ออก เราจะไม่ล็อคการเชื่อมต่อแล้ว
-
   try {
     const sqlMain = `
             SELECT 
@@ -166,47 +163,39 @@ export const getDormById = async (req: Request, res: Response) => {
             WHERE d.DORM_ID = ?
         `;
 
-    // ✅ เปลี่ยนมาใช้ dbcon.query ตรงๆ ระบบจะจองและคืนการเชื่อมต่อให้เองแบบอัตโนมัติ
     const [dormInfo] = await dbcon.query<RowDataPacket[]>(sqlMain, [id]);
-
     if (dormInfo.length === 0) {
       return res.status(404).json({ success: false, message: "ไม่พบข้อมูลหอพัก" });
     }
-
     const mainData = dormInfo[0] as RowDataPacket;
 
-    const [images] = await dbcon.query<RowDataPacket[]>(
-      "SELECT IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
-      [id]
-    );
+    const [images] = await dbcon.query<RowDataPacket[]>("SELECT IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?", [id]);
 
     const [facilitiesData] = await dbcon.query<RowDataPacket[]>(
-      `
-            SELECT ft.FAC_TYPE_NAME 
-            FROM FACILITIES_DORMS fd
-            JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID
-            WHERE fd.DORM_ID = ?
-        `,
-      [id]
+      `SELECT ft.FAC_TYPE_NAME FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ?`, [id]
     );
-
     const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
 
-// ✅ แก้ไข: เปลี่ยนคำสั่ง SQL ค้นหาห้องพัก ให้ดึงผ่านตารางเชื่อม DORM_ROOMS
+    // ✅ แก้ไข: ดึงข้อมูลห้องพักให้ครบถ้วน (รายเดือน, รายเทอม, ประเภทเตียง)
     const [rooms] = await dbcon.query<RowDataPacket[]>(
       `
-            SELECT rt.ROOM_TYPE_NAME, rp.PRICE
-            FROM DORM_ROOMS dr
-            JOIN ROOM_TYPES rt ON dr.ROOM_TYPE_ID = rt.ROOM_TYPE_ID
-            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-            WHERE dr.DORM_ID = ?
-        `,
-      [id]
+        SELECT 
+            dr.DORM_ROOM_ID,
+            rt.ROOM_TYPE_ID,
+            rt.ROOM_TYPE_NAME, 
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE END) as perMonth,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = 2 THEN rp.PRICE END) as perTerm,
+            rb.BED_TYPE_ID
+        FROM DORM_ROOMS dr
+        JOIN ROOM_TYPES rt ON dr.ROOM_TYPE_ID = rt.ROOM_TYPE_ID
+        LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+        LEFT JOIN ROOM_BEDS rb ON dr.DORM_ROOM_ID = rb.DORM_ROOM_ID
+        WHERE dr.DORM_ID = ?
+        GROUP BY dr.DORM_ROOM_ID, rt.ROOM_TYPE_ID, rt.ROOM_TYPE_NAME, rb.BED_TYPE_ID
+      `, [id]
     );
-    const minPrice =
-      rooms.length > 0
-        ? Math.min(...rooms.map((r: any) => r.PRICE))
-        : mainData.start_price || 0;
+
+    const minPrice = rooms.length > 0 ? Math.min(...rooms.map((r: any) => r.perMonth || 0)) : mainData.start_price || 0;
 
     const responseData = {
       ...mainData,
@@ -214,23 +203,25 @@ export const getDormById = async (req: Request, res: Response) => {
       image: mainData.FRONT_DORM_IMAGE,
       address: mainData.ADDRESS,
       start_price: minPrice,
-
       phone: mainData.OWNER_PHONE || "-",
       line: mainData.OWNER_LINE || "-",
       facebook: mainData.OWNER_FACEBOOK || "-",
       instagram: mainData.OWNER_INSTAGRAM || "-",
       telegram: mainData.OWNER_TELEGRAM || "-",
       x: mainData.OWNER_X || "-",
-
       facilities: facilitiesList,
       gallery: images.map((img: any) => img.IMAGE_PATH),
-      rooms: rooms,
+      // ✅ ส่งข้อมูลห้องที่ดึงมาใหม่กลับไปให้ครบ
+      rooms: rooms.map((r: any) => ({
+        ROOM_TYPE_ID: r.ROOM_TYPE_ID,
+        ROOM_TYPE_NAME: r.ROOM_TYPE_NAME,
+        PRICE: r.perMonth || 0,
+        perTerm: r.perTerm || 0,
+        bedType: r.BED_TYPE_ID === 2 ? 'Double Bed' : 'Single Bed'
+      })),
     };
 
-    res.json({
-      success: true,
-      data: responseData,
-    });
+    res.json({ success: true, data: responseData });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
     return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ", error: error.message });
@@ -576,85 +567,39 @@ export const updateDorm_api = async (req: Request, res: Response) => {
 };
 
 export const updateDormInfo_fn = async (
-  dormId: number,
-  data: any,
-  files: MulterFiles,
-  conn: PoolConnection,
-  ownerId: number
+  dormId: number, data: any, files: MulterFiles, conn: PoolConnection, ownerId: number
 ) => {
   let sql = "UPDATE DORMITORIES SET UPDATE_AT = CURRENT_DATE()";
   const params: any[] = [];
   const [oldData] = await conn.execute<RowDataPacket[]>(
-    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?",
-    [dormId]
+    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?", [dormId]
   );
-  if (data.name) {
-    sql += ", DORM_NAME = ?";
-    params.push(data.name);
-  }
-  if (data.address) {
-    sql += ", ADDRESS = ?";
-    params.push(data.address);
-  }
-  if (data.lat && data.lng) {
-    sql += ", COORDINATES = ST_GeomFromText(?)";
-    params.push(`POINT(${data.lat} ${data.lng})`);
-  }
-  if (data.zone_id) {
-    sql += ", ZONE_ID = ?";
-    params.push(data.zone_id);
-  }
-  if (data.type_id) {
-    sql += ", DORM_TYPE_ID = ?";
-    params.push(data.type_id);
-  }
-  if (data.water_unit) {
-    sql += ", WATER_UNIT = ?";
-    params.push(data.water_unit);
-  }
-  if (data.water_lump) {
-    sql += ", WATER_LUMP = ?";
-    params.push(data.water_lump);
-  }
-  if (data.elect_unit) {
-    sql += ", ELECT_UNIT = ?";
-    params.push(data.elect_unit);
-  }
-  if (data.detail) {
-    sql += ", ADD_DORM_DATA = ?";
-    params.push(data.detail);
-  }
+  
+  // ✅ แก้ไข: เช็ค !== undefined เพื่อป้องกันเลข 0 ถูกมองว่าเป็นค่าว่าง
+  if (data.name !== undefined && data.name !== '') { sql += ", DORM_NAME = ?"; params.push(data.name); }
+  if (data.address !== undefined && data.address !== '') { sql += ", ADDRESS = ?"; params.push(data.address); }
+  if (data.lat !== undefined && data.lng !== undefined) { sql += ", COORDINATES = ST_GeomFromText(?)"; params.push(`POINT(${data.lat} ${data.lng})`); }
+  if (data.zone_id !== undefined) { sql += ", ZONE_ID = ?"; params.push(data.zone_id); }
+  if (data.type_id !== undefined) { sql += ", DORM_TYPE_ID = ?"; params.push(data.type_id); }
+  if (data.water_unit !== undefined) { sql += ", WATER_UNIT = ?"; params.push(data.water_unit); }
+  if (data.water_lump !== undefined) { sql += ", WATER_LUMP = ?"; params.push(data.water_lump); }
+  if (data.elect_unit !== undefined) { sql += ", ELECT_UNIT = ?"; params.push(data.elect_unit); }
+  if (data.detail !== undefined) { sql += ", ADD_DORM_DATA = ?"; params.push(data.detail); }
 
   if (files["FRONT_DORM_IMG"]?.[0]) {
-    if (oldData[0]?.FRONT_DORM_IMAGE)
-      await deleteFromGCS(oldData[0].FRONT_DORM_IMAGE);
-    const url = await fileUpload(
-      files["FRONT_DORM_IMG"][0],
-      "dorms",
-      `${data.name}_${ownerId}`,
-      null,
-      "FRONT_DORM_IMG"
-    );
-    sql += ", FRONT_DORM_IMAGE = ?";
-    params.push(url);
+    if (oldData[0]?.FRONT_DORM_IMAGE) await deleteFromGCS(oldData[0].FRONT_DORM_IMAGE);
+    const url = await fileUpload(files["FRONT_DORM_IMG"][0], "dorms", `${data.name}_${ownerId}`, null, "FRONT_DORM_IMG");
+    sql += ", FRONT_DORM_IMAGE = ?"; params.push(url);
   }
 
   if (files["LICENSE_IMG"]?.[0]) {
     if (oldData[0]?.DORM_LICENSE) await deleteFromGCS(oldData[0].DORM_LICENSE);
-    const url = await fileUpload(
-      files["LICENSE_IMG"][0],
-      "dorms",
-      `${data.name}_${ownerId}`,
-      null,
-      "LICENSE_IMG"
-    );
-    sql += ", DORM_LICENSE = ?";
-    params.push(url);
+    const url = await fileUpload(files["LICENSE_IMG"][0], "dorms", `${data.name}_${ownerId}`, null, "LICENSE_IMG");
+    sql += ", DORM_LICENSE = ?"; params.push(url);
   }
 
   sql += " WHERE DORM_ID = ?";
   params.push(dormId);
-
   await conn.execute(sql, params);
 };
 
