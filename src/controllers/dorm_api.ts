@@ -24,9 +24,9 @@ export type MulterFiles = {
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
     const { search, zone, minPrice, maxPrice, lat, lng, radius } = req.query;
+    console.log("getAllDorms called with query:", req.query);
     const trimmedSearch = search ? search.toString().trim() : '';
 
-    // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS แทน ROOM_TYPES โดยตรง
     let sql = `
             SELECT 
                 d.DORM_ID, 
@@ -54,27 +54,26 @@ export const getAllDorms = async (req: Request, res: Response) => {
       params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
     }
 
-    if (zone) {
-      sql += ` AND dz.ZONE_NAME = ? `;
-      params.push(zone);
+    if (zone && zone !== '' && zone !== 'null' && zone !== 'undefined') {
+      sql += ` AND d.ZONE_ID = ? `;
+      params.push(Number(zone));
     }
 
-    if (lat && lng && radius) {
-      // Calculate distance in meters using ST_Distance_Sphere (MySQL expects POINT(longitude, latitude))
-      // Moving this to WHERE clause before GROUP BY fixes the 'Unknown column' error and improves performance
+    if (lat && lng && radius && lat !== 'null' && lng !== 'null' && radius !== 'null') {
       sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
       params.push(Number(lng), Number(lat), Number(radius) * 1000);
     }
 
-    sql += ` GROUP BY d.DORM_ID, dz.ZONE_NAME `;
+    // Comprehensive GROUP BY for strict mode compatibility
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
 
     const havingClauses = [];
-    if (minPrice) {
-      havingClauses.push(`start_price >= ?`);
+    if (minPrice !== undefined && minPrice !== null && minPrice !== '' && minPrice !== 'null' && minPrice !== 'undefined') {
+      havingClauses.push(`COALESCE(MIN(rp.PRICE), 0) >= ?`);
       params.push(Number(minPrice));
     }
-    if (maxPrice) {
-      havingClauses.push(`start_price <= ?`);
+    if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '' && maxPrice !== 'null' && maxPrice !== 'undefined') {
+      havingClauses.push(`COALESCE(MIN(rp.PRICE), 0) <= ?`);
       params.push(Number(maxPrice));
     }
 
@@ -83,10 +82,12 @@ export const getAllDorms = async (req: Request, res: Response) => {
     }
 
     sql += ` ORDER BY d.UPDATE_AT DESC `;
+    
+    console.log("getAllDorms executing SQL:", sql);
+    console.log("getAllDorms with params:", params);
 
     const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
-    const response: DormAllGetRes = { success: true, data: dorms };
-    res.json(response);
+    res.json({ success: true, data: dorms });
   } catch (error) {
     console.error("Error in getAllDorms:", error);
     res
