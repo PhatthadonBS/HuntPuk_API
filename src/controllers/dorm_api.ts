@@ -24,6 +24,7 @@ export type MulterFiles = {
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
     const { search, zone, minPrice, maxPrice, lat, lng, radius } = req.query;
+    const trimmedSearch = search ? search.toString().trim() : '';
 
     // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS แทน ROOM_TYPES โดยตรง
     let sql = `
@@ -48,9 +49,9 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     const params: any[] = [];
 
-    if (search) {
+    if (trimmedSearch) {
       sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
-      params.push(`%${search}%`, `%${search}%`);
+      params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
     }
 
     if (zone) {
