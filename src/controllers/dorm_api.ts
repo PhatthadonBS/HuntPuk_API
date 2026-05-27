@@ -37,12 +37,13 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 dz.ZONE_NAME as zone, 
                 ST_X(d.COORDINATES) as lat, 
                 ST_Y(d.COORDINATES) as lng, 
-                COALESCE(MIN(rp.PRICE), 0) as start_price
+                COALESCE(MIN(rp.PRICE), 0) as start_price,
+                d.DORM_STATUS_ID as status
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
             LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-            WHERE d.DORM_STATUS_ID = 1
+            WHERE d.DORM_STATUS_ID in (1, 3)
         `;
 
     const params: any[] = [];
@@ -1236,6 +1237,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.VIEW_COUNT,
                   dz.ZONE_NAME,
                   COALESCE(MIN(rp.PRICE), 0) as start_price,
+                  d.DORM_STATUS_ID as status,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID

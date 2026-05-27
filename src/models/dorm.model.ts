@@ -47,6 +47,7 @@ export interface DormSummary extends RowDataPacket {
     lng:        number;
     start_price: number;
     update_at?: string;
+    status?: number;
 }
 
 export interface DormAllGetRes {
