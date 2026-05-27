@@ -24,7 +24,6 @@ export type MulterFiles = {
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
     const { search, zone, minPrice, maxPrice, lat, lng, radius } = req.query;
-    console.log("getAllDorms called with query:", req.query);
     const trimmedSearch = search ? search.toString().trim() : '';
 
     let sql = `
@@ -82,9 +81,6 @@ export const getAllDorms = async (req: Request, res: Response) => {
     }
 
     sql += ` ORDER BY d.UPDATE_AT DESC `;
-    
-    console.log("getAllDorms executing SQL:", sql);
-    console.log("getAllDorms with params:", params);
 
     const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
     res.json({ success: true, data: dorms });
