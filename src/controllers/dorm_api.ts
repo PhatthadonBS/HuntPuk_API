@@ -743,10 +743,11 @@ export const updateFacilities_fn = async (
 export const updateRoomTypes_fn = async (
   dormId: number,
   roomTypesJson: string,
-  conn: PoolConnection,
+  conn: PoolConnection
 ) => {
   const getBedId = (name: string): number => {
-    const n = name.toString().toLowerCase();
+    // ป้องกันกรณี name เป็น null/undefined
+    const n = name?.toString().toLowerCase() || '';
     if (n.includes("single") || n === "1") return 1;
     if (n.includes("double") || n === "2") return 2;
     return 1;
@@ -759,75 +760,70 @@ export const updateRoomTypes_fn = async (
     return;
   }
 
-  // 1. ค้นหา DORM_ROOM_ID ของหอพักนี้ทั้งหมด เพื่อเตรียมล้างข้อมูลราคาและเตียงเก่าทิ้ง
-  const [existingDormRooms] = await conn.execute<RowDataPacket[]>(
-    "SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ?",
-    [dormId],
-  );
+  // ป้องกันกรณีไม่มีข้อมูลส่งมา
+  if (!roomTypes || roomTypes.length === 0) return;
 
+  // 1. ค้นหา DORM_ROOM_ID ของหอพักนี้ทั้งหมด เพื่อเตรียมล้างข้อมูลเก่า
+  const [existingDormRooms] = await conn.execute<RowDataPacket[]>(
+    "SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ?", [dormId]
+  );
+  
   const dormRoomIds = existingDormRooms.map((r: any) => r.DORM_ROOM_ID);
 
-  // 2. เคลียร์ข้อมูลลูก (ราคา และ เตียง) และข้อมูลความสัมพันธ์เก่าทิ้งให้หมด (ล้างไพ่)
+  // 2. เคลียร์ข้อมูลลูก (ราคา และ เตียง) และข้อมูลความสัมพันธ์เก่าทิ้ง
   if (dormRoomIds.length > 0) {
     const placeholders = dormRoomIds.map(() => "?").join(",");
-    await conn.execute(
-      `DELETE FROM ROOM_PRICES WHERE DORM_ROOM_ID IN (${placeholders})`,
-      dormRoomIds,
-    );
-    await conn.execute(
-      `DELETE FROM ROOM_BEDS WHERE DORM_ROOM_ID IN (${placeholders})`,
-      dormRoomIds,
-    );
+    await conn.execute(`DELETE FROM ROOM_PRICES WHERE DORM_ROOM_ID IN (${placeholders})`, dormRoomIds);
+    await conn.execute(`DELETE FROM ROOM_BEDS WHERE DORM_ROOM_ID IN (${placeholders})`, dormRoomIds);
     await conn.execute(`DELETE FROM DORM_ROOMS WHERE DORM_ID = ?`, [dormId]);
   }
 
-  // 3. สร้างโครงสร้างห้องพักเข้าไปใหม่ (ตามที่ผู้ใช้ส่งมาจากการแก้ไขล่าสุด)
+  // 🌟 ใช้ Set เพื่อจำไว้ว่าเราเพิ่มห้องชื่อนี้ไปหรือยัง (ป้องกัน Error 500 ชื่อห้องซ้ำ)
+  const insertedRoomTypeIds = new Set<number>();
+
+  // 3. สร้างโครงสร้างห้องพักเข้าไปใหม่
   for (const room of roomTypes) {
+    if (!room.roomType || room.roomType.trim() === '') continue; // ข้ามถ้าไม่ได้กรอกชื่อห้อง
+
     let roomTypeId;
-
-    // เช็คว่ามีชื่อห้องนี้อยู่ในระบบหรือยัง (ถ้ายังให้ INSERT ใหม่)
+    
+    // เช็คว่ามีชื่อห้องนี้อยู่ในระบบภาพรวมหรือยัง
     const [existingRt] = await conn.execute<RowDataPacket[]>(
-      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
-      [room.roomType],
+      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [room.roomType.trim()]
     );
-
+    
     if (existingRt.length > 0) {
-      roomTypeId = existingRt[0]!.ROOM_TYPE_ID; // เติม ! กัน Strict Mode
+      roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
     } else {
       const [rtResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
-        [room.roomType],
+        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [room.roomType.trim()]
       );
       roomTypeId = rtResult.insertId;
     }
 
+    // 🌟 พระเอกอยู่ตรงนี้: ถ้าเพิ่มห้องประเภทนี้ไปแล้ว (ป้องกัน Duplicate Entry DB พัง) ให้ข้ามเลย
+    if (insertedRoomTypeIds.has(roomTypeId)) {
+      continue; 
+    }
+    insertedRoomTypeIds.add(roomTypeId);
+
     // สร้างสะพานเชื่อมระหว่าง หอพัก <-> ประเภทห้อง
     const [drResult] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
-      [dormId, roomTypeId],
+      `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
     );
     const dormRoomId = drResult.insertId;
 
     // เพิ่มราคา (อ้างอิงด้วย DORM_ROOM_ID)
     if (room.perMonth) {
-      await conn.execute(
-        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-        [dormRoomId, room.perMonth],
-      );
+      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
     }
     if (room.perTerm) {
-      await conn.execute(
-        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-        [dormRoomId, room.perTerm],
-      );
+      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
     }
 
     // เพิ่มประเภทเตียง (อ้างอิงด้วย DORM_ROOM_ID)
     const bedTypeId = getBedId(room.bedType);
-    await conn.execute(
-      `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
-      [dormRoomId, bedTypeId],
-    );
+    await conn.execute(`INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`, [dormRoomId, bedTypeId]);
   }
 };
 
