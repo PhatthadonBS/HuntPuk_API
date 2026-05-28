@@ -37,7 +37,8 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 dz.ZONE_NAME as zone, 
                 ST_X(d.COORDINATES) as lat, 
                 ST_Y(d.COORDINATES) as lng, 
-                COALESCE(MIN(rp.PRICE), 0) as start_price,
+                /* 🌟 แก้ไขจุดที่ 1: ดึงเฉพาะรายเดือนและมากกว่า 0 */
+                COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                 d.DORM_STATUS_ID as status
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
@@ -63,16 +64,15 @@ export const getAllDorms = async (req: Request, res: Response) => {
       params.push(Number(lng), Number(lat), Number(radius) * 1000);
     }
 
-    // Comprehensive GROUP BY for strict mode compatibility
     sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
 
     const havingClauses = [];
     if (minPrice !== undefined && minPrice !== null && minPrice !== '' && minPrice !== 'null' && minPrice !== 'undefined') {
-      havingClauses.push(`COALESCE(MIN(rp.PRICE), 0) >= ?`);
+      havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`);
       params.push(Number(minPrice));
     }
     if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '' && maxPrice !== 'null' && maxPrice !== 'undefined') {
-      havingClauses.push(`COALESCE(MIN(rp.PRICE), 0) <= ?`);
+      havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`);
       params.push(Number(maxPrice));
     }
 
@@ -196,7 +196,7 @@ export const getDormById = async (req: Request, res: Response) => {
     );
     const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
 
-    // ✅ แก้ไข: ดึงข้อมูลห้องพักให้ครบถ้วน (รายเดือน, รายเทอม, ประเภทเตียง)
+    // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay)
     const [rooms] = await dbcon.query<RowDataPacket[]>(
       `
         SELECT 
@@ -205,6 +205,7 @@ export const getDormById = async (req: Request, res: Response) => {
             rt.ROOM_TYPE_NAME, 
             MAX(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE END) as perMonth,
             MAX(CASE WHEN rp.PRICE_TYPE_ID = 2 THEN rp.PRICE END) as perTerm,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = 3 THEN rp.PRICE END) as perDay,
             rb.BED_TYPE_ID
         FROM DORM_ROOMS dr
         JOIN ROOM_TYPES rt ON dr.ROOM_TYPE_ID = rt.ROOM_TYPE_ID
@@ -216,10 +217,12 @@ export const getDormById = async (req: Request, res: Response) => {
       [id],
     );
 
-    const minPrice =
-      rooms.length > 0
-        ? Math.min(...rooms.map((r: any) => r.perMonth || 0))
-        : mainData.start_price || 0;
+    // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
+    const validMonthlyPrices = rooms.map((r: any) => Number(r.perMonth || 0)).filter((p: number) => p > 0);
+    const minPrice = validMonthlyPrices.length > 0 ? Math.min(...validMonthlyPrices) : (mainData.start_price || 0);
+
+    const validTermPrices = rooms.map((r: any) => Number(r.perTerm || 0)).filter((p: number) => p > 0);
+    const minTermPrice = validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
 
     const responseData = {
       ...mainData,
@@ -227,6 +230,7 @@ export const getDormById = async (req: Request, res: Response) => {
       image: mainData.FRONT_DORM_IMAGE,
       address: mainData.ADDRESS,
       start_price: minPrice,
+      term_price: minTermPrice, // ส่งรายเทอมไปด้วย
       phone: mainData.OWNER_PHONE || "-",
       line: mainData.OWNER_LINE || "-",
       facebook: mainData.OWNER_FACEBOOK || "-",
@@ -235,12 +239,12 @@ export const getDormById = async (req: Request, res: Response) => {
       x: mainData.OWNER_X || "-",
       facilities: facilitiesList,
       gallery: images.map((img: any) => img.IMAGE_PATH),
-      // ✅ ส่งข้อมูลห้องที่ดึงมาใหม่กลับไปให้ครบ
       rooms: rooms.map((r: any) => ({
         ROOM_TYPE_ID: r.ROOM_TYPE_ID,
         ROOM_TYPE_NAME: r.ROOM_TYPE_NAME,
         PRICE: r.perMonth || 0,
         perTerm: r.perTerm || 0,
+        perDay: r.perDay || 0, // ส่งรายวันไปด้วย
         bedType: r.BED_TYPE_ID === 2 ? "Double Bed" : "Single Bed",
       })),
     };
@@ -257,7 +261,6 @@ export const getDormById = async (req: Request, res: Response) => {
       });
   }
 };
-
 export const getAllZones = async (req: Request, res: Response) => {
   try {
     // ✅ เปลี่ยนจาก SELECT * เป็นการแกะ lat, lng ออกจากจุด POINT
@@ -1220,7 +1223,6 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
 
-    // ✅ แก้ไข: เปลี่ยนไป JOIN กับตาราง DORM_ROOMS
     const sql = `
               SELECT 
                   d.DORM_ID, 
@@ -1230,7 +1232,8 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.FRONT_DORM_IMAGE as image, 
                   d.VIEW_COUNT,
                   dz.ZONE_NAME,
-                  COALESCE(MIN(rp.PRICE), 0) as start_price,
+                  /* 🌟 แก้ไขจุดที่ 6: หน้า Popular ก็ต้องยึดรายเดือน */
+                  COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                   d.DORM_STATUS_ID as status,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
