@@ -742,7 +742,6 @@ export const updateRoomTypes_fn = async (
   conn: PoolConnection
 ) => {
   const getBedId = (name: string): number => {
-    // ป้องกันกรณี name เป็น null/undefined
     const n = name?.toString().toLowerCase() || '';
     if (n.includes("single") || n === "1") return 1;
     if (n.includes("double") || n === "2") return 2;
@@ -756,28 +755,22 @@ export const updateRoomTypes_fn = async (
     return;
   }
 
-  // ป้องกันกรณีไม่มีข้อมูลส่งมา
   if (!roomTypes || roomTypes.length === 0) return;
 
-  // 1. ค้นหา DORM_ROOM_ID ของหอพักนี้ทั้งหมด เพื่อเตรียมล้างข้อมูลเก่า
-  const [existingDormRooms] = await conn.execute<RowDataPacket[]>(
-    "SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ?", [dormId]
-  );
-  
-  const dormRoomIds = existingDormRooms.map((r: any) => r.DORM_ROOM_ID);
-
-  // 2. เคลียร์ข้อมูลลูก (ราคา และ เตียง) และข้อมูลความสัมพันธ์เก่าทิ้ง
-  if (dormRoomIds.length > 0) {
-    const placeholders = dormRoomIds.map(() => "?").join(",");
-    await conn.execute(`DELETE FROM ROOM_PRICES WHERE DORM_ROOM_ID IN (${placeholders})`, dormRoomIds);
-    await conn.execute(`DELETE FROM ROOM_BEDS WHERE DORM_ROOM_ID IN (${placeholders})`, dormRoomIds);
-    await conn.execute(`DELETE FROM DORM_ROOMS WHERE DORM_ID = ?`, [dormId]);
-  }
+  // 🌟 1. ท่าไม้ตาย: ล้างข้อมูลห้องพัก, ราคา และเตียง ของเก่าทิ้งแบบ 100% ด้วย SQL บรรทัดเดียว
+  // วิธีนี้ชัวร์กว่าการใช้ SELECT แล้วมาวนลูป DELETE ครับ จะไม่มีข้อมูลขยะตกค้างแน่นอน
+  await conn.execute(`
+    DELETE rp, rb, dr 
+    FROM DORM_ROOMS dr 
+    LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID 
+    LEFT JOIN ROOM_BEDS rb ON dr.DORM_ROOM_ID = rb.DORM_ROOM_ID 
+    WHERE dr.DORM_ID = ?
+  `, [dormId]);
 
   // 🌟 ใช้ Set เพื่อจำไว้ว่าเราเพิ่มห้องชื่อนี้ไปหรือยัง (ป้องกัน Error 500 ชื่อห้องซ้ำ)
   const insertedRoomTypeIds = new Set<number>();
 
-  // 3. สร้างโครงสร้างห้องพักเข้าไปใหม่
+  // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
   for (const room of roomTypes) {
     if (!room.roomType || room.roomType.trim() === '') continue; // ข้ามถ้าไม่ได้กรอกชื่อห้อง
 
