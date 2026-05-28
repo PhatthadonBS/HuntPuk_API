@@ -757,8 +757,7 @@ export const updateRoomTypes_fn = async (
 
   if (!roomTypes || roomTypes.length === 0) return;
 
-  // 🌟 1. ท่าไม้ตาย: ล้างข้อมูลห้องพัก, ราคา และเตียง ของเก่าทิ้งแบบ 100% ด้วย SQL บรรทัดเดียว
-  // วิธีนี้ชัวร์กว่าการใช้ SELECT แล้วมาวนลูป DELETE ครับ จะไม่มีข้อมูลขยะตกค้างแน่นอน
+  // 1. ล้างข้อมูลเก่าแบบ 100%
   await conn.execute(`
     DELETE rp, rb, dr 
     FROM DORM_ROOMS dr 
@@ -767,34 +766,42 @@ export const updateRoomTypes_fn = async (
     WHERE dr.DORM_ID = ?
   `, [dormId]);
 
-  // 🌟 ใช้ Set เพื่อจำไว้ว่าเราเพิ่มห้องชื่อนี้ไปหรือยัง (ป้องกัน Error 500 ชื่อห้องซ้ำ)
-  const insertedRoomTypeIds = new Set<number>();
+  // 🌟 พระเอกคนใหม่: ใช้ Set เพื่อเก็บ "ชื่อห้อง" แทน ID
+  const insertedRoomNames = new Set<string>();
 
   // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
   for (const room of roomTypes) {
-    if (!room.roomType || room.roomType.trim() === '') continue; // ข้ามถ้าไม่ได้กรอกชื่อห้อง
+    if (!room.roomType || room.roomType.trim() === '') continue; // ข้ามถ้าไม่ได้กรอกชื่อ
+
+    let roomName = room.roomType.trim();
+
+    // 🌟 ระบบสุดฉลาด: ถ้าเจอชื่อห้องซ้ำกันในรอบการบันทึกนี้ ให้ดึงประเภทเตียงมาต่อท้ายชื่อห้องอัตโนมัติ!
+    if (insertedRoomNames.has(roomName)) {
+       const bedSuffix = (room.bedType === 'Double Bed' || room.bedType === '2') ? 'เตียงคู่' : 'เตียงเดี่ยว';
+       roomName = `${roomName} (${bedSuffix})`;
+    }
+
+    // ถ้าแอบต่อท้ายแล้วยังซ้ำอีก (เช่น ผู้ใช้กดส่ง "ห้องพัดลมเตียงคู่" มา 2 กล่องเป๊ะๆ) อันนี้ต้องข้ามของจริงเพื่อกันพัง
+    if (insertedRoomNames.has(roomName)) {
+       continue; 
+    }
+    insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
     let roomTypeId;
     
-    // เช็คว่ามีชื่อห้องนี้อยู่ในระบบภาพรวมหรือยัง
+    // เช็คว่ามีชื่อห้องนี้อยู่ในระบบภาพรวมหรือยัง (เช็คจาก roomName ที่อาจจะถูกเติมคำแล้ว)
     const [existingRt] = await conn.execute<RowDataPacket[]>(
-      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [room.roomType.trim()]
+      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
     );
     
     if (existingRt.length > 0) {
       roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
     } else {
       const [rtResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [room.roomType.trim()]
+        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [roomName]
       );
       roomTypeId = rtResult.insertId;
     }
-
-    // 🌟 พระเอกอยู่ตรงนี้: ถ้าเพิ่มห้องประเภทนี้ไปแล้ว (ป้องกัน Duplicate Entry DB พัง) ให้ข้ามเลย
-    if (insertedRoomTypeIds.has(roomTypeId)) {
-      continue; 
-    }
-    insertedRoomTypeIds.add(roomTypeId);
 
     // สร้างสะพานเชื่อมระหว่าง หอพัก <-> ประเภทห้อง
     const [drResult] = await conn.execute<ResultSetHeader>(
@@ -802,7 +809,7 @@ export const updateRoomTypes_fn = async (
     );
     const dormRoomId = drResult.insertId;
 
-    // เพิ่มราคา (อ้างอิงด้วย DORM_ROOM_ID)
+    // เพิ่มราคา
     if (room.perMonth) {
       await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
     }
@@ -810,7 +817,7 @@ export const updateRoomTypes_fn = async (
       await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
     }
 
-    // เพิ่มประเภทเตียง (อ้างอิงด้วย DORM_ROOM_ID)
+    // เพิ่มประเภทเตียง
     const bedTypeId = getBedId(room.bedType);
     await conn.execute(`INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`, [dormRoomId, bedTypeId]);
   }
