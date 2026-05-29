@@ -1486,3 +1486,27 @@ export const updateFacility_api = async (req: Request, res: Response) => {
     conn.release();
   }
 };
+
+export const changeDormStatus_api = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status_id } = req.body; // รับค่า 1 (ว่าง) หรือ 3 (เต็ม)
+  const conn = await dbcon.getConnection();
+
+  try {
+    const [result] = await conn.execute<ResultSetHeader>(
+      "UPDATE DORMITORIES SET DORM_STATUS_ID = ? WHERE DORM_ID = ?",
+      [status_id, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลหอพักนี้" });
+    }
+
+    res.json({ success: true, message: "เปลี่ยนสถานะหอพักเรียบร้อยแล้ว" });
+  } catch (error: any) {
+    console.error("Change Status Error:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
