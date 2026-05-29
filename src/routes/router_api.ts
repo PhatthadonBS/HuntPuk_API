@@ -78,8 +78,7 @@ router.post('/api/dorms', verifyToken, imgTypeUploads, dormController.createDorm
 router.post('/api/dorms/approve', verifyToken, dormController.approveDormReq_api);//pass
 router.post('/api/dorms/facility', verifyToken, upload.single("fac"), dormController.addFacility_api);//pass
 router.get('/api/dorms/facilities', dormController.getFacilities_api);//pass
-router.put('/api/dorms/changeStatus/:id', verifyToken, dormController.changeDormStatus_api);//pass
-
+router.put('/api/dorms/changeStatus/:id', verifyToken, dormController.changeDormStatus_api);
  
 //specific data group
 router.get('/api/spec/user/:id', verifyToken, userController.getUser_api)//pass

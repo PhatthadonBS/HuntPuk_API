@@ -1107,7 +1107,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
 
   try {
     const sql = `
-                SELECT 
+               SELECT 
                     d.DORM_ID,
                     d.DORM_NAME,
                     d.FRONT_DORM_IMAGE,
@@ -1115,9 +1115,10 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     d.SCORE,
                     d.VIEW_COUNT,
                     d.REQ_STATUS,       
+                    d.DORM_STATUS_ID, 
                     ds.DORM_STATUS_NAME, 
                     dz.ZONE_NAME,
-                    COALESCE(MIN(rp.PRICE), 0) AS start_price 
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
                 FROM DORMITORIES d
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
