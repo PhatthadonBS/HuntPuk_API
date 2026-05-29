@@ -110,4 +110,45 @@ export interface FacOfDormGetRes extends RowDataPacket {
     FAC_TYPE_ICON: string;
     DORM_ID:       number;
 }
+
+export interface DormRoomDetail {
+    ROOM_TYPE_ID: number;
+    ROOM_TYPE_NAME: string;
+    PRICE: number;
+    perTerm: number;
+    perDay: number;
+    bedType: string;
+}
+
+export interface DormDetailGetRes extends RowDataPacket {
+    DORM_ID: number;
+    DORM_NAME: string;
+    ADDRESS: string;
+    SCORE: string;
+    lat: number;
+    lng: number;
+    ZONE_NAME: string;
+    FIRST_NAME: string;
+    LAST_NAME: string;
+    OWNER_LINE: string;
+    OWNER_FACEBOOK: string;
+    OWNER_INSTAGRAM: string;
+    OWNER_TELEGRAM: string;
+    OWNER_X: string;
+    OWNER_PHONE: string;
+    image: string;
+    address: string;
+    start_price: number;
+    term_price: number | null;
+    phone: string;
+    line: string;
+    facebook: string;
+    instagram: string;
+    telegram: string;
+    x: string;
+    facilities?: string[];
+    gallery?: string[];
+    rooms?: DormRoomDetail[];
+    DORM_STATUS_ID: number;
+}
  

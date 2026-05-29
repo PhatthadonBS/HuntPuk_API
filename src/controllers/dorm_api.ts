@@ -14,6 +14,7 @@ import {
   FacOfDormGetRes,
   DormSummary,
   DormAllGetRes,
+  DormDetailGetRes,
 } from "../models/dorm.model";
 import { User } from "../models/user.model";
 
@@ -178,12 +179,13 @@ export const getDormById = async (req: Request, res: Response) => {
         `;
 
     const [dormInfo] = await dbcon.query<RowDataPacket[]>(sqlMain, [id]);
+
     if (dormInfo.length === 0) {
       return res
         .status(404)
         .json({ success: false, message: "ไม่พบข้อมูลหอพัก" });
     }
-    const mainData = dormInfo[0] as RowDataPacket;
+    const mainData = dormInfo[0]!;
 
     const [images] = await dbcon.query<RowDataPacket[]>(
       "SELECT IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
@@ -224,7 +226,7 @@ export const getDormById = async (req: Request, res: Response) => {
     const validTermPrices = rooms.map((r: any) => Number(r.perTerm || 0)).filter((p: number) => p > 0);
     const minTermPrice = validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
 
-    const responseData = {
+    const responseData: Partial<DormDetailGetRes> = {
       ...mainData,
       DORM_NAME: mainData.DORM_NAME,
       image: mainData.FRONT_DORM_IMAGE,
