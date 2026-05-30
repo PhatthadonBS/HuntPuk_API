@@ -592,15 +592,22 @@ export const updateDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const dormId = Number(id);
   const body = req.body;
-  const files = req.files as MulterFiles;
+  const files = (req.files as MulterFiles) || {}; // 🌟 ป้องกันบั๊กกรณีไม่ได้แนบรูป
 
   const conn = await dbcon.getConnection();
 
   try {
     await conn.beginTransaction();
-    const [dormData] = await getDormById_fn(dormId, conn);
-    if (!dormData) return res.status(400).json("Dorm not found");
+    const dormList = await getDormById_fn(dormId, conn);
+    
+    // 🌟 ดักจับกรณีหาหอพักไม่เจอ จะได้คืน Connection ให้ระบบ
+    if (!dormList || dormList.length === 0) {
+      await conn.rollback();
+      return res.status(400).json("Dorm not found");
+    }
+    const dormData : any = dormList[0];
     const ownerId = dormData.DORM_OWNER_ID;
+
     await updateDormInfo_fn(dormId, body, files, conn, ownerId);
 
     if (body.facilities) {
@@ -612,7 +619,6 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     }
 
     await updateRoomComponentImages_fn(dormId, body.name, files, conn, ownerId);
-
     await updateGalleryImages_fn(dormId, body.name, files, ownerId, conn);
 
     await conn.commit();
@@ -620,9 +626,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
   } catch (error: any) {
     await conn.rollback();
     console.error("Update Error:", error);
-    res
-      .status(500)
-      .json({
+    res.status(500).json({
         success: false,
         message: "เกิดข้อผิดพลาดในการอัปเดตข้อมูลหอพัก",
         error: error.message,
@@ -762,14 +766,22 @@ export const updateRoomTypes_fn = async (
 
   if (!roomTypes || roomTypes.length === 0) return;
 
-  // 1. ล้างข้อมูลเก่าแบบ 100%
+  // 🌟 1. ล้างข้อมูลเก่าแบบ 100% (แก้บั๊ก Error 500: ทยอยลบจากลูกไปหาแม่ ปลอดภัยชัวร์!)
   await conn.execute(`
-    DELETE rp, rb, dr 
-    FROM DORM_ROOMS dr 
-    LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID 
-    LEFT JOIN ROOM_BEDS rb ON dr.DORM_ROOM_ID = rb.DORM_ROOM_ID 
+    DELETE rp FROM ROOM_PRICES rp 
+    JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID 
     WHERE dr.DORM_ID = ?
   `, [dormId]);
+  
+  await conn.execute(`
+    DELETE rb FROM ROOM_BEDS rb 
+    JOIN DORM_ROOMS dr ON rb.DORM_ROOM_ID = dr.DORM_ROOM_ID 
+    WHERE dr.DORM_ID = ?
+  `, [dormId]);
+
+  // ลบตารางแม่ได้อย่างปลอดภัย
+  await conn.execute(`DELETE FROM DORM_ROOMS WHERE DORM_ID = ?`, [dormId]);
+
 
   // 🌟 พระเอกคนใหม่: ใช้ Set เพื่อเก็บ "ชื่อห้อง" แทน ID
   const insertedRoomNames = new Set<string>();
@@ -814,11 +826,11 @@ export const updateRoomTypes_fn = async (
     );
     const dormRoomId = drResult.insertId;
 
-    // เพิ่มราคา
-    if (room.perMonth) {
+// เพิ่มราคา
+    if (room.perMonth !== null && room.perMonth !== undefined) {
       await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
     }
-    if (room.perTerm) {
+    if (room.perTerm !== null && room.perTerm !== undefined) {
       await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
     }
 
