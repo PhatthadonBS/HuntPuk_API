@@ -385,7 +385,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
   const files = req.files as MulterFiles;
 
   let facilitiesArr: number[] = [];
-  let roomTypesArr: any[] = []; // 🌟 แก้เป็น any[] ป้องกัน TypeScript หา perDay ไม่เจอ
+  let roomTypesArr: any[] = []; 
   try {
     facilitiesArr = JSON.parse(facilities || "[]");
     roomTypesArr = JSON.parse(roomTypes || "[]");
@@ -430,7 +430,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
       mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
     const licenseUrl = mainImgs.find((x) => x.key === "LICENSE_IMG")?.url || "";
 
-    // 🌟 จุดที่ 1: บังคับใส่ REQ_STATUS = 0 (รอตรวจสอบ) เสมอเวลาสร้างหอพักใหม่
     const sqlDorm = `
             INSERT INTO DORMITORIES 
             (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
@@ -511,31 +510,26 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
     const uploadedRoomImgs = await Promise.all(roomUploadTasks);
 
-    // 🌟 ปรับปรุงให้อ่านค่า 1 และ 2 จากหน้าเว็บได้ตรงกัน
+    // 🌟 แปลงตัวเลือกเตียง (1, 2, 3, 4) ให้เป็นตัวเลขรับเข้าฐานข้อมูล
     const getBedId = async (name: string): Promise<number> => {
-      const n = name?.toString().toLowerCase() || '';
-      if (n.includes("single") || n === "1") return 1;
-      if (n.includes("double") || n === "2") return 2;
-      return 1;
+      const n = name?.toString() || '1';
+      return parseInt(n) || 1;
     };
 
     const insertedRoomNames = new Set<string>();
 
-    // 🌟 จุดที่ 2: ระบบจัดการห้องพัก (ดักจับชื่อซ้ำ + เพิ่มราคารายวัน)
     for (const room of roomTypesArr) {
       if (!room.roomType || room.roomType.trim() === '') continue;
 
       let roomName = room.roomType.trim();
 
-      // ดักชื่อซ้ำโดยใส่ชื่อเตียงต่อท้าย
       if (insertedRoomNames.has(roomName)) {
-        const bedSuffix = (room.bedType === 'Double Bed' || room.bedType === '2') ? 'เตียงคู่' : 'เตียงเดี่ยว';
+        const bedSuffix = (room.bedType === '3' || room.bedType === '4') ? 'เตียงคู่' : 'เตียงเดี่ยว';
         roomName = `${roomName} (${bedSuffix})`;
       }
       if (insertedRoomNames.has(roomName)) continue; 
       insertedRoomNames.add(roomName);
 
-      // 1. หาว่ามีประเภทห้องนี้ในระบบหรือยัง ถ้ายังให้สร้างใหม่
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
         `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
@@ -552,14 +546,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
         roomTypeId = rtResult.insertId;
       }
 
-      // 2. สร้างความสัมพันธ์ในตาราง DORM_ROOMS
       const [drResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
         [dormId, roomTypeId],
       );
       const dormRoomId = drResult.insertId;
 
-      // 3. เพิ่มราคาใน ROOM_PRICES
       if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '') {
         await conn.execute(
           `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
@@ -572,7 +564,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
           [dormRoomId, room.perTerm],
         );
       }
-      // 🌟 เพิ่มราคารายวัน
       if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '') {
         await conn.execute(
           `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
@@ -580,7 +571,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
         );
       }
 
-      // 4. เพิ่มประเภทเตียงใน ROOM_BEDS
       const bedTypeId = await getBedId(room.bedType);
       await conn.execute(
         `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
@@ -614,6 +604,8 @@ export const createDorm_api = async (req: Request, res: Response) => {
     conn.release();
   }
 };
+
+
 export const updateDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const dormId = Number(id);
