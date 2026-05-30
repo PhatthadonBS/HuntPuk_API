@@ -382,7 +382,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
   const files = req.files as MulterFiles;
 
   let facilitiesArr: number[] = [];
-  let roomTypesArr: DormRoomTypeReqPostReq[] = [];
+  let roomTypesArr: any[] = []; // 🌟 แก้เป็น any[] ป้องกัน TypeScript หา perDay ไม่เจอ
   try {
     facilitiesArr = JSON.parse(facilities || "[]");
     roomTypesArr = JSON.parse(roomTypes || "[]");
@@ -427,11 +427,13 @@ export const createDorm_api = async (req: Request, res: Response) => {
       mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
     const licenseUrl = mainImgs.find((x) => x.key === "LICENSE_IMG")?.url || "";
 
+    // 🌟 จุดที่ 1: บังคับใส่ REQ_STATUS = 0 (รอตรวจสอบ) เสมอเวลาสร้างหอพักใหม่
     const sqlDorm = `
             INSERT INTO DORMITORIES 
             (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
-             WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA)
-            VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?)
+             WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA,
+             REQ_STATUS, DORM_STATUS_ID)
+            VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
         `;
     const pointStr = `POINT(${lat} ${lng})`;
 
@@ -442,9 +444,9 @@ export const createDorm_api = async (req: Request, res: Response) => {
       pointStr,
       zone_id,
       type_id,
-      water_unit,
-      water_lump,
-      elect_unit,
+      water_unit || 0,
+      water_lump || 0,
+      elect_unit || 0,
       frontUrl,
       licenseUrl,
       detail,
@@ -452,7 +454,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
     const dormId = dormResult.insertId;
 
     if (facilitiesArr.length > 0) {
-      const facValues = facilitiesArr.map((facId) => [dormId, facId]);
       for (const facId of facilitiesArr) {
         await conn.execute(
           `INSERT IGNORE INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID) VALUES (?, ?)`,
@@ -507,20 +508,35 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
     const uploadedRoomImgs = await Promise.all(roomUploadTasks);
 
+    // 🌟 ปรับปรุงให้อ่านค่า 1 และ 2 จากหน้าเว็บได้ตรงกัน
     const getBedId = async (name: string): Promise<number> => {
-      const n = name.toLowerCase();
-      if (n.includes("single")) return 1;
-      if (n.includes("double")) return 2;
+      const n = name?.toString().toLowerCase() || '';
+      if (n.includes("single") || n === "1") return 1;
+      if (n.includes("double") || n === "2") return 2;
       return 1;
     };
 
-    // ✅ จุดที่ 1: ปรับการบันทึกห้องพักใหม่ให้เชื่อมกับตาราง DORM_ROOMS
+    const insertedRoomNames = new Set<string>();
+
+    // 🌟 จุดที่ 2: ระบบจัดการห้องพัก (ดักจับชื่อซ้ำ + เพิ่มราคารายวัน)
     for (const room of roomTypesArr) {
+      if (!room.roomType || room.roomType.trim() === '') continue;
+
+      let roomName = room.roomType.trim();
+
+      // ดักชื่อซ้ำโดยใส่ชื่อเตียงต่อท้าย
+      if (insertedRoomNames.has(roomName)) {
+        const bedSuffix = (room.bedType === 'Double Bed' || room.bedType === '2') ? 'เตียงคู่' : 'เตียงเดี่ยว';
+        roomName = `${roomName} (${bedSuffix})`;
+      }
+      if (insertedRoomNames.has(roomName)) continue; 
+      insertedRoomNames.add(roomName);
+
       // 1. หาว่ามีประเภทห้องนี้ในระบบหรือยัง ถ้ายังให้สร้างใหม่
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
         `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
-        [room.roomType],
+        [roomName],
       );
 
       if (existingRt.length > 0) {
@@ -528,7 +544,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
       } else {
         const [rtResult] = await conn.execute<ResultSetHeader>(
           `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
-          [room.roomType],
+          [roomName],
         );
         roomTypeId = rtResult.insertId;
       }
@@ -540,17 +556,24 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       const dormRoomId = drResult.insertId;
 
-      // 3. เพิ่มราคาใน ROOM_PRICES (ใช้ DORM_ROOM_ID เป็นตัวอ้างอิง)
-      if (room.perMonth) {
+      // 3. เพิ่มราคาใน ROOM_PRICES
+      if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '') {
         await conn.execute(
           `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
           [dormRoomId, room.perMonth],
         );
       }
-      if (room.perTerm) {
+      if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '') {
         await conn.execute(
           `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
           [dormRoomId, room.perTerm],
+        );
+      }
+      // 🌟 เพิ่มราคารายวัน
+      if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '') {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+          [dormRoomId, room.perDay],
         );
       }
 
@@ -568,6 +591,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
         [dormId, img.url],
       );
     }
+    
     await conn.commit();
     res.status(201).json({
       success: true,
@@ -587,7 +611,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
     conn.release();
   }
 };
-
 export const updateDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const dormId = Number(id);
