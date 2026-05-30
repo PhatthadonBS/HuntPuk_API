@@ -24,7 +24,7 @@ export interface DormRegPostReq {
 export interface RoomTypeItem {
     roomTypeId?: number | string;
     roomType: string;
-    bedType: string;
+    bedType: string; 
     perMonth: number;
     perTerm: number;
 }
@@ -140,6 +140,9 @@ export interface DormDetailGetRes extends RowDataPacket {
     address: string;
     start_price: number;
     term_price: number | null;
+    WATER_UNIT: number | null;
+    WATER_LUMP: number | null;
+    ELECT_UNIT: number | null;
     phone: string;
     line: string;
     facebook: string;

@@ -58,6 +58,8 @@ router.get('/api/user/dormOwnerReq', verifyToken, dormController.getPendingOwner
 
 // auth group
 router.post('/api/auth/login', userController.login);//pass
+router.post('/api/auth/SendOTP/register', strictLimiter, userController.OTP_Sender_Reg_api);
+router.post('/api/auth/SendOTP/reset', strictLimiter, userController.OTP_Sender_Reset_api);
 router.post('/api/auth/SendOTP', strictLimiter, userController.OTP_Sender_api);//pass
 router.delete('/api/auth/OTPVerify', userController.OTP_Verify_api);//pass
 router.post('/api/auth/recoverAccount', userController.recoverAccount_api)//pass

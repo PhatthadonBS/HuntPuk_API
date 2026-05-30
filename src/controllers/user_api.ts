@@ -42,6 +42,26 @@ export const OTP_Verify_api = async (req: Request, res: Response) => {
   }
 };
 
+export const OTP_Sender_Reg_api = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  try {
+    const res1 = await OTP_Sender_Reg_fn(email);
+    res.status(200).json({ success: res1 });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error });
+  }
+};
+
+export const OTP_Sender_Reset_api = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  try {
+    const res1 = await OTP_Sender_Reset_fn(email);
+    res.status(200).json({ success: res1 });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error });
+  }
+};
+
 export const OTP_Sender_api = async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
@@ -876,6 +896,143 @@ async function delOldOTP_fn(email: string) {
   }
 }
 
+export async function OTP_Sender_Reg_fn(email: string) {
+  const otp = Math.floor(100000 + Math.random() * 899999).toString();
+  try {
+    await delOldOTP_fn(email);
+    await dbcon.execute(
+      "INSERT INTO OTP_VERIFIES(otp_code, email) VALUES(?, ?)",
+      [otp, email],
+    );
+
+    const otpHtmlContent = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            .body-wrap { background-color: #f6f9fc; padding: 70px 0; }
+            .container { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; }
+            .card { background-color: #ffffff; border-radius: 24px; padding: 60px 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); border: 1px solid #eef2f7; text-align: center; }
+            .logo { font-size: 32px; font-weight: 900; color: #2563eb; letter-spacing: -0.04em; margin-bottom: 50px; }
+            .title { font-size: 24px; color: #0f172a; font-weight: 700; margin-bottom: 12px; }
+            .subtitle { font-size: 15px; color: #64748b; margin-bottom: 44px; line-height: 1.6; }
+            .otp-container { background-color: #f8fafc; border-radius: 20px; padding: 40px; margin-bottom: 40px; border: 2px solid #f1f5f9; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+            .otp-code { font-size: 56px; font-weight: 800; color: #1e293b; letter-spacing: 0.3em; font-family: 'Monaco', 'Courier New', monospace; margin: 0; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .expiry { font-size: 14px; color: #ef4444; font-weight: 600; margin-bottom: 40px; display: inline-block; padding: 6px 16px; background-color: #fef2f2; border-radius: 9999px; }
+            .footer { font-size: 12px; color: #94a3b8; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 32px; }
+        </style>
+    </head>
+    <body>
+        <div class="body-wrap">
+            <div class="container">
+                <div class="card">
+                    <div class="logo">HuntPuk</div>
+                    <div class="title">รหัสยืนยันตัวตน</div>
+                    <div class="subtitle">โปรดใช้รหัส OTP ด้านล่างเพื่อยืนยันการลงทะเบียนของคุณ</div>
+                    <div class="otp-container">
+                        <p class="otp-code">${otp}</p>
+                    </div>
+                    <div class="expiry">รหัสหมดอายุใน 3 นาที</div>
+                    <div class="footer">
+                        หากคุณไม่ได้ร้องขอรหัสนี้ โปรดเพิกเฉยต่ออีเมลฉบับนี้<br>
+                        &copy; ${new Date().getFullYear()} HuntPuk. All rights reserved.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    return await sendBrevoOTP(email, otpHtmlContent);
+  } catch (error) {
+    console.error("Reg OTP Error:", error);
+    return false;
+  }
+}
+
+export async function OTP_Sender_Reset_fn(email: string) {
+  const otp = Math.floor(100000 + Math.random() * 899999).toString();
+  try {
+    const users = await getUser(email.trim());
+    if (users.length === 0) return false;
+
+    await delOldOTP_fn(email);
+    await dbcon.execute(
+      "INSERT INTO OTP_VERIFIES(otp_code, email) VALUES(?, ?)",
+      [otp, email],
+    );
+
+    const otpHtmlContent = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            .body-wrap { background-color: #f6f9fc; padding: 70px 0; }
+            .container { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; }
+            .card { background-color: #ffffff; border-radius: 24px; padding: 60px 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); border: 1px solid #eef2f7; text-align: center; }
+            .logo { font-size: 32px; font-weight: 900; color: #2563eb; letter-spacing: -0.04em; margin-bottom: 50px; }
+            .title { font-size: 24px; color: #0f172a; font-weight: 700; margin-bottom: 12px; }
+            .subtitle { font-size: 15px; color: #64748b; margin-bottom: 44px; line-height: 1.6; }
+            .otp-container { background-color: #f8fafc; border-radius: 20px; padding: 40px; margin-bottom: 40px; border: 2px solid #f1f5f9; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+            .otp-code { font-size: 56px; font-weight: 800; color: #1e293b; letter-spacing: 0.3em; font-family: 'Monaco', 'Courier New', monospace; margin: 0; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .expiry { font-size: 14px; color: #ef4444; font-weight: 600; margin-bottom: 40px; display: inline-block; padding: 6px 16px; background-color: #fef2f2; border-radius: 9999px; }
+            .footer { font-size: 12px; color: #94a3b8; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 32px; }
+        </style>
+    </head>
+    <body>
+        <div class="body-wrap">
+            <div class="container">
+                <div class="card">
+                    <div class="logo">HuntPuk</div>
+                    <div class="title">รหัสยืนยันตัวตน</div>
+                    <div class="subtitle">โปรดใช้รหัส OTP ด้านล่างเพื่อยืนยันการรีเซ็ตรหัสผ่านของคุณ</div>
+                    <div class="otp-container">
+                        <p class="otp-code">${otp}</p>
+                    </div>
+                    <div class="expiry">รหัสหมดอายุใน 3 นาที</div>
+                    <div class="footer">
+                        หากคุณไม่ได้ร้องขอรหัสนี้ โปรดเพิกเฉยต่ออีเมลฉบับนี้<br>
+                        &copy; ${new Date().getFullYear()} HuntPuk. All rights reserved.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    return await sendBrevoOTP(email, otpHtmlContent);
+  } catch (error) {
+    console.error("Reset OTP Error:", error);
+    return false;
+  }
+}
+
+async function sendBrevoOTP(email: string, htmlContent: string) {
+  const payload = {
+    sender: { name: "HuntPuk Team", email: "no-reply@huntpuk.space" },
+    to: [{ email: email }],
+    subject: "รหัสยืนยันตัวตน (OTP) สำหรับ HuntPuk",
+    htmlContent: htmlContent,
+  };
+
+  try {
+    const response = await axios.post(BREVO_URL, payload, {
+      headers: {
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+      },
+    });
+    return response.status === 201;
+  } catch (error) {
+    console.error("Brevo API Error:", error);
+    return false;
+  }
+}
+
 export async function OTP_Sender_fn(email: string) {
   const otp = Math.floor(100000 + Math.random() * 899999).toString();
   try {
@@ -927,21 +1084,7 @@ export async function OTP_Sender_fn(email: string) {
     </html>
     `;
 
-    const payload = {
-      sender: { name: "HuntPuk Team", email: "no-reply@huntpuk.space" },
-      to: [{ email: email }],
-      subject: "รหัสยืนยันตัวตน (OTP) สำหรับ HuntPuk",
-      htmlContent: otpHtmlContent,
-    };
-
-    const response = await axios.post(BREVO_URL, payload, {
-      headers: {
-        "api-key": BREVO_API_KEY,
-        "content-type": "application/json",
-      },
-    });
-
-    return response.status === 201;
+    return await sendBrevoOTP(email, otpHtmlContent);
   } catch (error) {
     console.error("Brevo API Error:", error);
     return false;
