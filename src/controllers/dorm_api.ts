@@ -757,7 +757,7 @@ export const updateRoomTypes_fn = async (
     return 1;
   };
 
-  let roomTypes: RoomTypeItem[] = [];
+let roomTypes: any[] = [];
   try {
     roomTypes = JSON.parse(roomTypesJson);
   } catch (e) {
@@ -832,6 +832,10 @@ export const updateRoomTypes_fn = async (
     }
     if (room.perTerm !== null && room.perTerm !== undefined) {
       await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
+    }
+    // 🌟 เพิ่มราคารายวัน (PRICE_TYPE_ID = 3)
+    if (room.perDay !== null && room.perDay !== undefined) {
+      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
     }
 
     // เพิ่มประเภทเตียง
