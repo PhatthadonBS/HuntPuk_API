@@ -149,7 +149,7 @@ export interface DormDetailGetRes extends RowDataPacket {
     instagram: string;
     telegram: string;
     x: string;
-    facilities?: string[];
+    facilities?: { name: string; icon: string }[];
     gallery?: string[];
     rooms?: DormRoomDetail[];
     DORM_STATUS_ID: number;

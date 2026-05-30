@@ -193,10 +193,13 @@ export const getDormById = async (req: Request, res: Response) => {
     );
 
     const [facilitiesData] = await dbcon.query<RowDataPacket[]>(
-      `SELECT ft.FAC_TYPE_NAME FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ?`,
+      `SELECT ft.FAC_TYPE_NAME, ft.FAC_TYPE_ICON FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ?`,
       [id],
     );
-    const facilitiesList = facilitiesData.map((f: any) => f.FAC_TYPE_NAME);
+    const facilitiesList = facilitiesData.map((f: any ) => ({
+      name: f.FAC_TYPE_NAME as string,
+      icon: f.FAC_TYPE_ICON as string
+    }));
 
     // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay)
     const [rooms] = await dbcon.query<RowDataPacket[]>(
