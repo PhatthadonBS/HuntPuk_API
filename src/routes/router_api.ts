@@ -18,8 +18,8 @@ router.get('/api', (_req, res) => {
 
 
 const strictLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 5,
+  windowMs: 3 * 60 * 1000,
+  max: 1,
 });
 
 const imgTypeUploads = upload.fields([

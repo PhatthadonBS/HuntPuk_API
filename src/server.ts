@@ -14,8 +14,8 @@ const app = express();
 app.set('trust proxy', 1);
 
 // 2. Global Rate Limiter
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+export const globalLimiter = rateLimit({
+  windowMs: 3 * 60 * 1000, // 3 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
