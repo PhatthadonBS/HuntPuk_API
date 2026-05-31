@@ -414,6 +414,18 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     const dorm_owner_id = ownerRows[0]!.DORM_OWNER_ID;
 
+    // ✅ แปลง zone_id เป็น number และ auto-detect ถ้าไม่ได้ส่งมา
+    let finalZoneId = Number(zone_id) || 0;
+    if (!finalZoneId) {
+      const pointStr2 = `POINT(${lat} ${lng})`;
+      const [zoneRows] = await conn.query<RowDataPacket[]>(`
+        SELECT ZONE_ID,
+          ST_Distance_Sphere(COORDINATES, POINT(ST_X(ST_GeomFromText(?)), ST_Y(ST_GeomFromText(?)))) AS dist
+        FROM DORM_ZONES ORDER BY dist ASC LIMIT 1
+      `, [pointStr2, pointStr2]);
+      finalZoneId = zoneRows[0]?.ZONE_ID ?? 1;
+    }
+
     const mainImgTasks = [];
     if (files["FRONT_DORM_IMG"]?.[0]) {
       mainImgTasks.push(
@@ -457,14 +469,14 @@ export const createDorm_api = async (req: Request, res: Response) => {
       name,
       address,
       pointStr,
-      zone_id,
-      type_id,
-      water_unit || 0,
-      water_lump || 0,
-      elect_unit || 0,
+      finalZoneId,  // ✅ ใช้ finalZoneId
+      Number(type_id) || 1,
+      Number(water_unit) || 0,
+      Number(water_lump) || 0,
+      Number(elect_unit) || 0,
       frontUrl,
       licenseUrl,
-      detail,
+      detail || '',
     ]);
     const dormId = dormResult.insertId;
 
@@ -538,6 +550,13 @@ export const createDorm_api = async (req: Request, res: Response) => {
         );
         roomTypeId = rtResult.insertId;
       }
+
+      // ✅ ป้องกัน Duplicate DORM_ROOMS (UNIQUE KEY ROOM_TYPE_ID + DORM_ID)
+      const [existingDr] = await conn.execute<RowDataPacket[]>(
+        `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
+        [dormId, roomTypeId]
+      );
+      if (existingDr.length > 0) continue; // ข้ามถ้ามีอยู่แล้ว
 
       const [drResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
