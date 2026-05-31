@@ -367,7 +367,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
 
 export const createDorm_api = async (req: Request, res: Response) => {
   const {
-    owner_id,
+    user_id, // 🌟 รับ user_id ที่ส่งมาจากหน้าเว็บ
     name,
     address,
     lat,
@@ -401,13 +401,26 @@ export const createDorm_api = async (req: Request, res: Response) => {
   try {
     await conn.beginTransaction();
 
+    // 🌟 แก้บั๊ก 500: ต้องดึง DORM_OWNER_ID ออกมาจาก USER_ID ก่อนบันทึกลงตาราง
+    const [ownerRows] = await conn.execute<RowDataPacket[]>(
+      `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ?`,
+      [user_id]
+    );
+
+    if (ownerRows.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "ไม่พบข้อมูลสิทธิ์เจ้าของหอพัก" });
+    }
+
+    const dorm_owner_id = ownerRows[0]!.DORM_OWNER_ID;
+
     const mainImgTasks = [];
     if (files["FRONT_DORM_IMG"]?.[0]) {
       mainImgTasks.push(
         fileUpload(
           files["FRONT_DORM_IMG"][0],
           "dorms",
-          `${name}_${owner_id}`,
+          `${name}_${dorm_owner_id}`,
           null,
           "FRONT_DORM_IMG",
         ).then((url) => ({ key: "FRONT_DORM_IMG", url })),
@@ -418,7 +431,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
         fileUpload(
           files["LICENSE_IMG"][0],
           "dorms",
-          `${name}_${owner_id}`,
+          `${name}_${dorm_owner_id}`,
           null,
           "LICENSE_IMG",
         ).then((url) => ({ key: "LICENSE_IMG", url })),
@@ -426,8 +439,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
 
     const mainImgs = await Promise.all(mainImgTasks);
-    const frontUrl =
-      mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
+    const frontUrl = mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
     const licenseUrl = mainImgs.find((x) => x.key === "LICENSE_IMG")?.url || "";
 
     const sqlDorm = `
@@ -439,8 +451,9 @@ export const createDorm_api = async (req: Request, res: Response) => {
         `;
     const pointStr = `POINT(${lat} ${lng})`;
 
+    // 🌟 ใช้ dorm_owner_id ที่ดึงมาได้บันทึกลงตาราง
     const [dormResult] = await conn.execute<ResultSetHeader>(sqlDorm, [
-      owner_id,
+      dorm_owner_id,
       name,
       address,
       pointStr,
@@ -466,13 +479,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     if (files["OTHER_IMG"] && files["OTHER_IMG"].length > 0) {
       const otherTasks = files["OTHER_IMG"].map((file, idx) =>
-        fileUpload(
-          file,
-          "dorms",
-          `${name}_${owner_id}`,
-          "other_imgs",
-          `other_${idx}`,
-        ),
+        fileUpload(file, "dorms", `${name}_${dorm_owner_id}`, "other_imgs", `other_${idx}`)
       );
       const otherUrls = await Promise.all(otherTasks);
 
@@ -485,32 +492,20 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
 
     const roomImgFieldMap: Record<string, number> = {
-      CEILING_IMG: 1,
-      WALL_IMG: 2,
-      FLOOR_IMG: 3,
-      BED_IMG: 4,
-      BATHROOM_IMG: 5,
-      BALCONY_IMG: 6,
+      CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3, BED_IMG: 4, BATHROOM_IMG: 5, BALCONY_IMG: 6,
     };
 
     const roomUploadTasks = [];
-
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
       if (files[field]?.[0]) {
         roomUploadTasks.push(
-          fileUpload(
-            files[field][0],
-            "dorms",
-            `${name}_${owner_id}`,
-            "room_imgs",
-            field,
-          ).then((url) => ({ typeId, url })),
+          fileUpload(files[field][0], "dorms", `${name}_${dorm_owner_id}`, "room_imgs", field)
+            .then((url) => ({ typeId, url })),
         );
       }
     }
     const uploadedRoomImgs = await Promise.all(roomUploadTasks);
 
-    // 🌟 แปลงตัวเลือกเตียง (1, 2, 3, 4) ให้เป็นตัวเลขรับเข้าฐานข้อมูล
     const getBedId = async (name: string): Promise<number> => {
       const n = name?.toString() || '1';
       return parseInt(n) || 1;
@@ -532,74 +527,48 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
-        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
-        [roomName],
+        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
       );
 
       if (existingRt.length > 0) {
         roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
       } else {
         const [rtResult] = await conn.execute<ResultSetHeader>(
-          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
-          [roomName],
+          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [roomName]
         );
         roomTypeId = rtResult.insertId;
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
-        [dormId, roomTypeId],
+        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
       );
       const dormRoomId = drResult.insertId;
 
       if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '') {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-          [dormRoomId, room.perMonth],
-        );
+        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
       }
       if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '') {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-          [dormRoomId, room.perTerm],
-        );
+        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
       }
       if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '') {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-          [dormRoomId, room.perDay],
-        );
+        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
       }
 
       const bedTypeId = await getBedId(room.bedType);
-      await conn.execute(
-        `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
-        [dormRoomId, bedTypeId],
-      );
+      await conn.execute(`INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`, [dormRoomId, bedTypeId]);
     }
 
     for (const img of uploadedRoomImgs) {
-      await conn.execute(
-        `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-        [dormId, img.url],
-      );
+      await conn.execute(`INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`, [dormId, img.url]);
     }
     
     await conn.commit();
-    res.status(201).json({
-      success: true,
-      message: "ลงทะเบียนหอพักสำเร็จ",
-      dormId,
-    });
+    res.status(201).json({ success: true, message: "ลงทะเบียนหอพักสำเร็จ", dormId });
+
   } catch (error: any) {
     console.error("Transaction Error:", error);
     await conn.rollback();
-
-    res.status(500).json({
-      success: false,
-      message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก", error: error.message });
   } finally {
     conn.release();
   }
