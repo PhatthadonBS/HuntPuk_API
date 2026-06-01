@@ -888,7 +888,7 @@ export async function resMailSender_fn(
 async function delOldOTP_fn(email: string) {
   try {
     await dbcon.execute(
-      "DELETE FROM OTP_VERIFIES WHERE create_at < NOW() - INTERVAL 5 MINUTE",
+      "DELETE FROM OTP_VERIFIES WHERE create_at < NOW() - INTERVAL 3 MINUTE",
     );
     await dbcon.execute("DELETE FROM OTP_VERIFIES WHERE EMAIL = ?", [email]);
   } catch (error) {
