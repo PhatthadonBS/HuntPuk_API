@@ -367,7 +367,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
 
 export const createDorm_api = async (req: Request, res: Response) => {
   const {
-    user_id, // 🌟 รับ user_id ที่ส่งมาจากหน้าเว็บ
+    user_id,
     name,
     address,
     lat,
@@ -381,11 +381,11 @@ export const createDorm_api = async (req: Request, res: Response) => {
     facilities,
     roomTypes,
   } = req.body;
-
+ 
   const files = req.files as MulterFiles;
-
+ 
   let facilitiesArr: number[] = [];
-  let roomTypesArr: any[] = []; 
+  let roomTypesArr: any[] = [];
   try {
     facilitiesArr = JSON.parse(facilities || "[]");
     roomTypesArr = JSON.parse(roomTypes || "[]");
@@ -395,26 +395,62 @@ export const createDorm_api = async (req: Request, res: Response) => {
       message: "ข้อมูลสิ่งอำนวยความสะดวกหรือประเภทห้องพักไม่ถูกต้อง",
     });
   }
-
+ 
   const conn = await dbcon.getConnection();
-
+ 
   try {
     await conn.beginTransaction();
-
-    // 🌟 แก้บั๊ก 500: ต้องดึง DORM_OWNER_ID ออกมาจาก USER_ID ก่อนบันทึกลงตาราง
+ 
+    // ✅ FIX: ค้นหา DORM_OWNER_ID จาก USER_ID
+    //         ถ้า Admin ยังไม่มี record → auto-create ให้
     const [ownerRows] = await conn.execute<RowDataPacket[]>(
       `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ?`,
       [user_id]
     );
-
+ 
+    let dorm_owner_id: number;
+ 
     if (ownerRows.length === 0) {
-      await conn.rollback();
-      return res.status(400).json({ success: false, message: "ไม่พบข้อมูลสิทธิ์เจ้าของหอพัก" });
+      // ✅ ตรวจว่าเป็น Admin หรือเปล่า
+      const [userRows] = await conn.execute<RowDataPacket[]>(
+        `SELECT USERNAME, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?`,
+        [user_id]
+      );
+ 
+      if (userRows.length === 0) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: "ไม่พบบัญชีผู้ใช้ในระบบ" });
+      }
+ 
+      const roleId = userRows[0]!.ROLE_TYPE_ID;
+      const username = userRows[0]!.USERNAME;
+ 
+      // role 2 = Dorm Owner, role 3 = Admin → มีสิทธิ์ลงทะเบียน
+      if (roleId !== 2 && roleId !== 3) {
+        await conn.rollback();
+        return res.status(403).json({ success: false, message: "บัญชีนี้ไม่มีสิทธิ์ลงทะเบียนหอพัก" });
+      }
+ 
+      if (roleId === 3) {
+        // ✅ Admin → auto-create DORM_OWNERS record
+        const [insertOwner] = await conn.execute<ResultSetHeader>(
+          `INSERT INTO DORM_OWNERS 
+             (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, REQ_STATUS, PROFILE_IMAGE)
+           VALUES (?, ?, '(Admin)', NULL, NULL, NULL, NULL, NULL, 1, '')`,
+          [user_id, username]
+        );
+        dorm_owner_id = insertOwner.insertId;
+        console.log(`✅ Auto-created DORM_OWNERS for Admin: USER_ID=${user_id}, DORM_OWNER_ID=${dorm_owner_id}`);
+      } else {
+        // Dorm Owner แต่ไม่มี record → แจ้ง error ปกติ
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: "ไม่พบข้อมูลสิทธิ์เจ้าของหอพัก กรุณาลงทะเบียนเป็นเจ้าของหอพักก่อน" });
+      }
+    } else {
+      dorm_owner_id = ownerRows[0]!.DORM_OWNER_ID;
     }
-
-    const dorm_owner_id = ownerRows[0]!.DORM_OWNER_ID;
-
-    // ✅ แปลง zone_id เป็น number และ auto-detect ถ้าไม่ได้ส่งมา
+ 
+    // ✅ แปลง zone_id และ auto-detect ถ้าไม่ได้ส่งมา (เหมือนเดิม)
     let finalZoneId = Number(zone_id) || 0;
     if (!finalZoneId) {
       const pointStr2 = `POINT(${lat} ${lng})`;
@@ -425,7 +461,8 @@ export const createDorm_api = async (req: Request, res: Response) => {
       `, [pointStr2, pointStr2]);
       finalZoneId = zoneRows[0]?.ZONE_ID ?? 1;
     }
-
+ 
+    // Upload รูปหลัก (เหมือนเดิมทุกอย่าง)
     const mainImgTasks = [];
     if (files["FRONT_DORM_IMG"]?.[0]) {
       mainImgTasks.push(
@@ -449,27 +486,26 @@ export const createDorm_api = async (req: Request, res: Response) => {
         ).then((url) => ({ key: "LICENSE_IMG", url })),
       );
     }
-
+ 
     const mainImgs = await Promise.all(mainImgTasks);
     const frontUrl = mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
     const licenseUrl = mainImgs.find((x) => x.key === "LICENSE_IMG")?.url || "";
-
+ 
     const sqlDorm = `
-            INSERT INTO DORMITORIES 
-            (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
-             WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA,
-             REQ_STATUS, DORM_STATUS_ID)
-            VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
-        `;
+      INSERT INTO DORMITORIES 
+      (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
+       WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA,
+       REQ_STATUS, DORM_STATUS_ID)
+      VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
+    `;
     const pointStr = `POINT(${lat} ${lng})`;
-
-    // 🌟 ใช้ dorm_owner_id ที่ดึงมาได้บันทึกลงตาราง
+ 
     const [dormResult] = await conn.execute<ResultSetHeader>(sqlDorm, [
       dorm_owner_id,
       name,
       address,
       pointStr,
-      finalZoneId,  // ✅ ใช้ finalZoneId
+      finalZoneId,
       Number(type_id) || 1,
       Number(water_unit) || 0,
       Number(water_lump) || 0,
@@ -479,7 +515,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
       detail || '',
     ]);
     const dormId = dormResult.insertId;
-
+ 
     if (facilitiesArr.length > 0) {
       for (const facId of facilitiesArr) {
         await conn.execute(
@@ -488,13 +524,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
         );
       }
     }
-
+ 
     if (files["OTHER_IMG"] && files["OTHER_IMG"].length > 0) {
       const otherTasks = files["OTHER_IMG"].map((file, idx) =>
         fileUpload(file, "dorms", `${name}_${dorm_owner_id}`, "other_imgs", `other_${idx}`)
       );
       const otherUrls = await Promise.all(otherTasks);
-
       for (const url of otherUrls) {
         await conn.execute(
           `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
@@ -502,11 +537,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
         );
       }
     }
-
+ 
     const roomImgFieldMap: Record<string, number> = {
-      CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3, BED_IMG: 4, BATHROOM_IMG: 5, BALCONY_IMG: 6,
+      CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3,
+      BED_IMG: 4, BATHROOM_IMG: 5, BALCONY_IMG: 6,
     };
-
+ 
     const roomUploadTasks = [];
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
       if (files[field]?.[0]) {
@@ -517,31 +553,30 @@ export const createDorm_api = async (req: Request, res: Response) => {
       }
     }
     const uploadedRoomImgs = await Promise.all(roomUploadTasks);
-
+ 
     const getBedId = async (name: string): Promise<number> => {
       const n = name?.toString() || '1';
       return parseInt(n) || 1;
     };
-
+ 
     const insertedRoomNames = new Set<string>();
-
+ 
     for (const room of roomTypesArr) {
       if (!room.roomType || room.roomType.trim() === '') continue;
-
+ 
       let roomName = room.roomType.trim();
-
+ 
       if (insertedRoomNames.has(roomName)) {
         const bedSuffix = (room.bedType === '3' || room.bedType === '4') ? 'เตียงคู่' : 'เตียงเดี่ยว';
         roomName = `${roomName} (${bedSuffix})`;
       }
-      if (insertedRoomNames.has(roomName)) continue; 
+      if (insertedRoomNames.has(roomName)) continue;
       insertedRoomNames.add(roomName);
-
+ 
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
         `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
       );
-
       if (existingRt.length > 0) {
         roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
       } else {
@@ -550,44 +585,53 @@ export const createDorm_api = async (req: Request, res: Response) => {
         );
         roomTypeId = rtResult.insertId;
       }
-
-      // ✅ ป้องกัน Duplicate DORM_ROOMS (UNIQUE KEY ROOM_TYPE_ID + DORM_ID)
+ 
       const [existingDr] = await conn.execute<RowDataPacket[]>(
         `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
         [dormId, roomTypeId]
       );
-      if (existingDr.length > 0) continue; // ข้ามถ้ามีอยู่แล้ว
-
+      if (existingDr.length > 0) continue;
+ 
       const [drResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
       );
       const dormRoomId = drResult.insertId;
-
-      if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '') {
+ 
+      if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '' && Number(room.perMonth) > 0) {
         await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
       }
-      if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '') {
+      if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '' && Number(room.perTerm) > 0) {
         await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
       }
-      if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '') {
+      if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '' && Number(room.perDay) > 0) {
         await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
       }
-
+ 
       const bedTypeId = await getBedId(room.bedType);
-      await conn.execute(`INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`, [dormRoomId, bedTypeId]);
+      await conn.execute(
+        `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
+        [dormRoomId, bedTypeId]
+      );
     }
-
+ 
     for (const img of uploadedRoomImgs) {
-      await conn.execute(`INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`, [dormId, img.url]);
+      await conn.execute(
+        `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
+        [dormId, img.url]
+      );
     }
-    
+ 
     await conn.commit();
     res.status(201).json({ success: true, message: "ลงทะเบียนหอพักสำเร็จ", dormId });
-
+ 
   } catch (error: any) {
     console.error("Transaction Error:", error);
     await conn.rollback();
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก",
+      error: error.message
+    });
   } finally {
     conn.release();
   }
