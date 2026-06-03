@@ -497,7 +497,8 @@ export const recoverAccount_api = async (req: Request, res: Response) => {
 };
 
 export const addFavorite_api = async (req: Request, res: Response) => {
-  const { user_id, dorm_id } = req.body;
+  const user_id = req.body.user_id || (req as any).user?.id;
+  const { dorm_id } = req.body;
   try {
     // 1. ตรวจสอบว่าส่งค่ามาครบไหม
     if (!user_id || !dorm_id) {
@@ -529,7 +530,8 @@ export const addFavorite_api = async (req: Request, res: Response) => {
 };
 
 export const removeFavorite_api = async (req: Request, res: Response) => {
-  const { user_id, dorm_id } = req.body;
+  const user_id = req.body.user_id || (req as any).user?.id;
+  const { dorm_id } = req.body;
   try {
     if (!user_id || !dorm_id) {
       return res.status(400).json({ message: "ต้องการ User ID และ Dorm ID" });
@@ -725,7 +727,7 @@ export const getMyFavorites_api = async (req: Request, res: Response) => {
         `;
 
     const [rows] = await dbcon.query<RowDataPacket[]>(sql, [id]);
-    return res.status(200).json(rows);
+    return res.status(200).json({ success: true, data: rows });
   } catch (error) {
     console.error("เกิดข้อผิดพลาดภายในระบบ:", error);
     return res.status(500).json({
