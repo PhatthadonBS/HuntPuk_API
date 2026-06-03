@@ -22,11 +22,26 @@ export type MulterFiles = {
   [fieldname: string]: Express.Multer.File[];
 };
 
+// 🌟 ฟังก์ชันที่ 1: ดึงข้อมูลหอพักทั้งหมดพร้อมระบบกรองข้อมูลขั้นสูง (หน้าแรก / หน้าโฮม)
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
-    const { search, zone, minPrice, maxPrice, lat, lng, radius } = req.query;
+    // รับพารามิเตอร์การกรองและค้นหาจาก Query String
+    const { 
+      search, 
+      zone, 
+      minPrice, 
+      maxPrice, 
+      lat, 
+      lng, 
+      radius, 
+      minScore, 
+      maxWater, 
+      maxElect 
+    } = req.query;
+    
     const trimmedSearch = search ? search.toString().trim() : '';
 
+    // โครงสร้างคำสั่ง SQL ดึงข้อมูลพื้นฐานหอพักตามขอบเขตความต้องการ
     let sql = `
             SELECT 
                 d.DORM_ID, 
@@ -34,64 +49,109 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.ADDRESS, 
                 d.SCORE, 
                 d.FRONT_DORM_IMAGE as image, 
-                d.UPDATE_AT as update_at,
-                dz.ZONE_NAME as zone, 
-                ST_X(d.COORDINATES) as lat, 
-                ST_Y(d.COORDINATES) as lng, 
-                /* 🌟 แก้ไขจุดที่ 1: ดึงเฉพาะรายเดือนและมากกว่า 0 */
-                COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
-                d.DORM_STATUS_ID as status
+                z.ZONE_NAME as zone, 
+                d.LATITUDE as lat, 
+                d.LONGITUDE as lng, 
+                d.DORM_STATUS_ID as status,
+                d.WATER_UNIT,
+                d.WATER_LUMP,
+                d.ELECT_UNIT,
+                d.UPDATE_AT, -- 🌟 เพิ่มตามขอบเขต: วันที่อัปเดตข้อมูล
+                MIN(rt.PRICE) as start_price -- ราคาเริ่มต้นของหอพัก
             FROM DORMITORIES d
-            LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-            LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
-            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-            WHERE d.DORM_STATUS_ID in (1, 3)
+            LEFT JOIN ZONES z ON d.ZONE_ID = z.ZONE_ID
+            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+            WHERE 1=1
         `;
 
-    const params: any[] = [];
+    const queryParams: any[] = [];
 
+    // 🔍 1. ค้นหาด้วยชื่อหอพัก
     if (trimmedSearch) {
-      sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
-      params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
+      sql += ` AND d.DORM_NAME LIKE ?`;
+      queryParams.push(`%${trimmedSearch}%`);
     }
 
-    if (zone && zone !== '' && zone !== 'null' && zone !== 'undefined') {
-      sql += ` AND d.ZONE_ID = ? `;
-      params.push(Number(zone));
+    // 🗺️ 2. ค้นหาด้วยโซนของหอพัก
+    if (zone) {
+      sql += ` AND z.ZONE_NAME = ?`;
+      queryParams.push(zone);
     }
 
-    if (lat && lng && radius && lat !== 'null' && lng !== 'null' && radius !== 'null') {
-      sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
-      params.push(Number(lng), Number(lat), Number(radius) * 1000);
+    // ⭐ 3. ค้นหาด้วยคะแนนรีวิวขั้นต่ำ (เช่น หอพักที่มีคะแนน >= 4 ดาว)
+    if (minScore) {
+      sql += ` AND d.SCORE >= ?`;
+      queryParams.push(Number(minScore));
     }
 
-    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
-
-    const havingClauses = [];
-    if (minPrice !== undefined && minPrice !== null && minPrice !== '' && minPrice !== 'null' && minPrice !== 'undefined') {
-      havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`);
-      params.push(Number(minPrice));
+    // 💧 4. ค้นหาด้วยค่าน้ำต่อหน่วย/แบบเหมา สูงสุดที่ไม่เกินกำหนด
+    if (maxWater) {
+      sql += ` AND (d.WATER_UNIT <= ? OR d.WATER_LUMP <= ?)`;
+      queryParams.push(Number(maxWater), Number(maxWater));
     }
-    if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '' && maxPrice !== 'null' && maxPrice !== 'undefined') {
-      havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`);
-      params.push(Number(maxPrice));
+
+    // ⚡ 5. ค้นหาด้วยค่าไฟต่อหน่วย สูงสุดที่ไม่เกินกำหนด
+    if (maxElect) {
+      sql += ` AND d.ELECT_UNIT <= ?`;
+      queryParams.push(Number(maxElect));
+    }
+
+    // จัดกลุ่มข้อมูลเนื่องจากมีการใช้ Aggregate Function (MIN)
+    sql += ` GROUP BY d.DORM_ID`;
+
+    // 💰 6. ค้นหาด้วยช่วงราคาเช่าเริ่มต้นต่อเดือน (ต้องเช็คใน HAVING เพราะเป็นผลรวมย่อย)
+    let havingClauses = [];
+    if (minPrice) {
+      havingClauses.push(`start_price >= ?`);
+      queryParams.push(Number(minPrice));
+    }
+    if (maxPrice) {
+      havingClauses.push(`start_price <= ?`);
+      queryParams.push(Number(maxPrice));
     }
 
     if (havingClauses.length > 0) {
-      sql += ` HAVING ` + havingClauses.join(" AND ");
+      sql += ` HAVING ` + havingClauses.join(' AND ');
     }
 
-    sql += ` ORDER BY d.UPDATE_AT DESC `;
+    // สั่งรัน Query ดึงข้อมูลจากฐานข้อมูล
+    const [rows] = await dbcon.execute<RowDataPacket[]>(sql, queryParams);
 
-    const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
-    res.json({ success: true, data: dorms });
-  } catch (error) {
-    console.error("Error in getAllDorms:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+    // 📍 7. ค้นหาหอพักภายในรัศมีขอบเขตรอบจุดอ้างอิง (หมุดสีน้ำเงิน)
+    let finalDorms = rows;
+    if (lat && lng && radius) {
+      const userLat = Number(lat);
+      const userLng = Number(lng);
+      const maxRadius = Number(radius); // รัศมีหน่วยเป็นกิโลเมตร
+
+      finalDorms = rows.filter((dorm: any) => {
+        if (!dorm.lat || !dorm.lng) return false;
+        // คำนวณระยะห่างระหว่างจุดอ้างอิงของผู้ใช้กับที่ตั้งหอพัก
+        const distance = calculateHaversineDistance(userLat, userLng, Number(dorm.lat), Number(dorm.lng));
+        dorm.distance_from_ref = distance; // แนบระยะทางกลับไปให้หน้า Frontend นำไปแสดงผล
+        return distance <= maxRadius;
+      });
+    }
+
+    // ส่งผลลัพธ์ข้อมูลหอพักที่ผ่านการกรองกลับไปให้หน้า Frontend
+    res.status(200).json({ success: true, data: finalDorms });
+  } catch (error: any) {
+    console.error("Get All Dorms Error:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักขั้นสูง" });
   }
 };
+
+// 🌟 ฟังก์ชันเสริม: คำนวณระยะทางจากเส้นละติจูด/ลองจิจูด (Haversine Formula) คืนค่าเป็นกิโลเมตร
+function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // รัศมีของโลก (กิโลเมตร)
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; 
+}
 
 export async function getDormById_fn(did: number, conn: PoolConnection) {
   try {
