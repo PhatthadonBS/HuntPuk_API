@@ -88,7 +88,6 @@ export async function deleteFolder(folderName: string) {
       force: true,
     });
 
-    console.log(`ลบ${folderToDelete} เรียบร้อยแล้ว`);
   } catch (error) {
     throw new Error("ข้อผิดพลาด: ไม่สามารถลบโฟลเดอร์ได้");
   }

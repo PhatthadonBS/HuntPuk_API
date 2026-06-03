@@ -74,6 +74,7 @@ router.delete('/api/other/delFavorite', verifyToken, userController.removeFavori
 router.get('/api/dorms/pendingReq', verifyToken, dormController.getPendingDormReq_api);//pass
 router.get('/api/dorms/zones', dormController.getAllZones); 
 router.get('/api/dorms', dormController.getAllDorms);    
+router.get('/api/dorms/mobile', dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    
 router.get('/api/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/api/dorms', verifyToken, imgTypeUploads, dormController.createDorm_api);//pass

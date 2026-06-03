@@ -500,7 +500,6 @@ export const createDorm_api = async (req: Request, res: Response) => {
           [user_id, username]
         );
         dorm_owner_id = insertOwner.insertId;
-        console.log(`✅ Auto-created DORM_OWNERS for Admin: USER_ID=${user_id}, DORM_OWNER_ID=${dorm_owner_id}`);
       } else {
         // Dorm Owner แต่ไม่มี record → แจ้ง error ปกติ
         await conn.rollback();
@@ -1632,10 +1631,102 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, message: "เปลี่ยนสถานะหอพักเรียบร้อยแล้ว" });
-  } catch (error: any) {
+    } catch (error: any) {
     console.error("Change Status Error:", error);
     res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ", error: error.message });
-  } finally {
+    } finally {
     conn.release();
-  }
-};
+    }
+    };
+
+    export const getAllDormMB = async (req: Request, res: Response) => {
+      try {
+        const { search, zone, minPrice, maxPrice, lat, lng, radius, score } = req.query;
+        const trimmedSearch = search ? search.toString().trim() : "";
+
+        let sql = `
+                SELECT 
+                    d.DORM_ID, 
+                    d.DORM_NAME, 
+                    d.ADDRESS, 
+                    d.SCORE, 
+                    d.FRONT_DORM_IMAGE as image, 
+                    d.UPDATE_AT as update_at,
+                    dz.ZONE_NAME as zone, 
+                    ST_X(d.COORDINATES) as lat, 
+                    ST_Y(d.COORDINATES) as lng, 
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                    d.DORM_STATUS_ID as status
+                FROM DORMITORIES d
+                LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+                LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+                LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+                WHERE d.DORM_STATUS_ID in (1, 3)
+            `;
+
+        const params: any[] = [];
+
+        if (trimmedSearch) {
+          sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
+          params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
+        }
+
+        if (zone && zone !== "" && zone !== "null" && zone !== "undefined") {
+          const zoneId = Number(zone);
+          if (!isNaN(zoneId)) {
+            sql += ` AND d.ZONE_ID = ? `;
+            params.push(zoneId);
+          }
+        }
+
+        if (score && score !== "" && score !== "null" && score !== "undefined") {
+          const scoreNum = Number(score);
+          if (!isNaN(scoreNum)) {
+            sql += ` AND d.SCORE between ? and (? + 0.9) `;
+            params.push(scoreNum, scoreNum);
+          }
+        }
+
+        if (lat && lng && radius && lat !== "null" && lng !== "null" && radius !== "null") {
+          const latNum = Number(lat);
+          const lngNum = Number(lng);
+          const radiusNum = Number(radius);
+          if (!isNaN(latNum) && !isNaN(lngNum) && !isNaN(radiusNum)) {
+            sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
+            params.push(lngNum, latNum, radiusNum * 1000);
+          }
+        }
+
+        sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
+
+        const havingClauses = [];
+        if (minPrice !== undefined && minPrice !== null && minPrice !== "" && minPrice !== "null" && minPrice !== "undefined") {
+          const minP = Number(minPrice);
+          if (!isNaN(minP)) {
+            havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`);
+            params.push(minP);
+          }
+        }
+        if (maxPrice !== undefined && maxPrice !== null && maxPrice !== "" && maxPrice !== "null" && maxPrice !== "undefined") {
+          const maxP = Number(maxPrice);
+          if (!isNaN(maxP)) {
+            havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`);
+            params.push(maxP);
+          }
+        }
+
+        if (havingClauses.length > 0) {
+          sql += ` HAVING ` + havingClauses.join(" AND ");
+        }
+
+        sql += ` ORDER BY d.UPDATE_AT DESC `;
+
+        const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
+        res.json({ success: true, data: dorms });
+      } catch (error) {
+        console.error("Error in getAllDormMB:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+      }
+    };

@@ -26,7 +26,6 @@ export const verifyToken = (
     (err, decoded) => {
       if (err) return res.status(401).json("Unauthorized!");
       req.user = decoded; // ยัดข้อมูลที่ถอดรหัสได้ (เช่น user_id) ใส่ Request
-      console.log(req.user);
       next(); // ให้ไปทำงานที่ Controller ต่อไปได้
     },
   );
