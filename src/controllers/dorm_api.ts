@@ -261,7 +261,7 @@ export const getDormById = async (req: Request, res: Response) => {
       icon: f.FAC_TYPE_ICON as string
     }));
 
-    // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay)
+    // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay) และประเภทเตียงจากฐานข้อมูล
     const [rooms] = await dbcon.query<RowDataPacket[]>(
       `
         SELECT 
@@ -271,13 +271,15 @@ export const getDormById = async (req: Request, res: Response) => {
             MAX(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE END) as perMonth,
             MAX(CASE WHEN rp.PRICE_TYPE_ID = 2 THEN rp.PRICE END) as perTerm,
             MAX(CASE WHEN rp.PRICE_TYPE_ID = 3 THEN rp.PRICE END) as perDay,
-            rb.BED_TYPE_ID
+            rb.BED_TYPE_ID,
+            bt.BED_TYPE_NAME
         FROM DORM_ROOMS dr
         JOIN ROOM_TYPES rt ON dr.ROOM_TYPE_ID = rt.ROOM_TYPE_ID
         LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
         LEFT JOIN ROOM_BEDS rb ON dr.DORM_ROOM_ID = rb.DORM_ROOM_ID
+        LEFT JOIN BED_TYPES bt ON rb.BED_TYPE_ID = bt.BED_TYPE_ID
         WHERE dr.DORM_ID = ?
-        GROUP BY dr.DORM_ROOM_ID, rt.ROOM_TYPE_ID, rt.ROOM_TYPE_NAME, rb.BED_TYPE_ID
+        GROUP BY dr.DORM_ROOM_ID, rt.ROOM_TYPE_ID, rt.ROOM_TYPE_NAME, rb.BED_TYPE_ID, bt.BED_TYPE_NAME
       `,
       [id],
     );
@@ -310,7 +312,7 @@ export const getDormById = async (req: Request, res: Response) => {
         PRICE: r.perMonth || 0,
         perTerm: r.perTerm || 0,
         perDay: r.perDay || 0, // ส่งรายวันไปด้วย
-        bedType: r.BED_TYPE_ID === 2 ? "Double Bed" : "Single Bed",
+        bedType: r.BED_TYPE_NAME || "-",
       })),
     };
 
@@ -1124,7 +1126,7 @@ export const addReview_api = async (req: Request, res: Response) => {
   if (!user_id || !dorm_id || score === undefined) {
     return res
       .status(400)
-      .json({ success: false, message: "ข้อมูลไม่ครบถ้วน" });
+      .json({ success: false, message: `ข้อมูลไม่ครบถ้วน${user_id}, ${dorm_id}, ${score}, ${comment}` });
   }
 
   const conn = await dbcon.getConnection();
