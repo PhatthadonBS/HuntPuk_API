@@ -22,7 +22,6 @@ export type MulterFiles = {
   [fieldname: string]: Express.Multer.File[];
 };
 
-// 🌟 ฟังก์ชันที่ 1: ดึงข้อมูลหอพักทั้งหมดพร้อมระบบกรองข้อมูลขั้นสูง (หน้าแรก / หน้าโฮม)
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
     // รับพารามิเตอร์การกรองและค้นหาจาก Query String
@@ -50,17 +49,18 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.SCORE, 
                 d.FRONT_DORM_IMAGE as image, 
                 z.ZONE_NAME as zone, 
-                d.LATITUDE as lat, 
-                d.LONGITUDE as lng, 
+                ST_X(d.COORDINATES) as lat, 
+                ST_Y(d.COORDINATES) as lng, 
                 d.DORM_STATUS_ID as status,
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
                 d.UPDATE_AT, -- 🌟 เพิ่มตามขอบเขต: วันที่อัปเดตข้อมูล
-                MIN(rt.PRICE) as start_price -- ราคาเริ่มต้นของหอพัก
+                MIN(rp.PRICE) as start_price -- ราคาเริ่มต้นของหอพัก
             FROM DORMITORIES d
-            LEFT JOIN ZONES z ON d.ZONE_ID = z.ZONE_ID
-            LEFT JOIN ROOM_TYPES rt ON d.DORM_ID = rt.DORM_ID
+            LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
+            LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+            LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE 1=1
         `;
 
