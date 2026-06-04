@@ -466,6 +466,24 @@ export const banAccount_api = async (req: Request, res: Response) => {
   }
 };
 
+export const unbanAccount_api = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "UPDATE USERS SET ACCOUNT_STATUS = 0 WHERE USER_ID = ?",
+      [id],
+    );
+
+    if (result.affectedRows > 0) {
+      return res.status(200).json({ message: "บัญชีผู้ใช้ถูกยกเลิกการแบนแล้ว" });
+    } else {
+      return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
+    }
+  } catch (error) {
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+  }
+};
+
 //ต้องยืนยันตัวตนมาก่อน ค่อยทำ
 export const recoverAccount_api = async (req: Request, res: Response) => {
   const { email, verify } = req.body;
@@ -813,7 +831,11 @@ export async function getUser(email: string) {
 
 export async function getUsers_fn() {
   const [users] = await dbcon.execute<UserAllGetRes[]>(
-    `SELECT USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS FROM USERS WHERE ROLE_TYPE_ID IN (1, 2)`,
+    `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, 
+            DO.FIRST_NAME, DO.LAST_NAME 
+     FROM USERS U 
+     LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID 
+     WHERE U.ROLE_TYPE_ID IN (1, 2)`,
   );
   return users;
 }

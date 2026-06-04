@@ -91,6 +91,7 @@ router.put('/api/spec/restoreDorm/:id', verifyToken, dormController.restoreDorm_
 router.put('/api/spec/user/:id', verifyToken, userController.updateUser_api)//pass
 router.delete('/api/spec/delAccount/:id', verifyToken, userController.deleteAccount_api)//pass
 router.put('/api/spec/banAccount/:id', verifyToken, userController.banAccount_api)//pass
+router.put('/api/spec/unbanAccount/:id', verifyToken, userController.unbanAccount_api)//pass
 router.put('/api/spec/dorm/:id', verifyToken, imgTypeUploads, dormController.updateDorm_api)//pass
 router.get('/api/spec/dorm/:id', dormController.getDormsByOwner_api)//pass
 router.delete('/api/spec/review/:id', verifyToken, dormController.deleteReview_api)//pass
