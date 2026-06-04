@@ -56,14 +56,14 @@ export interface UserProfileUpdatePostReq {
 }
 
 export interface UserDormOwnerGetRes {
-    user_id:        number;
-    first_name:     string;
-    last_name:      string;
-    facebook:       string | null;
-    instagram:      string | null;
-    line:           string | null;
-    telegram:       string | null;
-    x:              string | null;
+    USER_ID:        number;
+    FIRST_NAME:     string;
+    LAST_NAME:      string;
+    FACEBOOK:       string | null;
+    INSTAGRAM:      string | null;
+    LINE:           string | null;
+    TELEGRAM:       string | null;
+    X:              string | null;
     REQ_STATUS:     number;
     PROFILE_IMAGE:  string;
     USERNAME:       string;
