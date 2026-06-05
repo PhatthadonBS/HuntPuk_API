@@ -88,7 +88,7 @@ router.get('/api/spec/user/:id', verifyToken, userController.getUser_api)//pass
 router.get('/api/spec/favorite/:id', verifyToken, userController.getMyFavorites_api)//pass
 router.delete('/api/spec/dorm/:id', verifyToken, dormController.removeDorm_api)//pass
 router.put('/api/spec/restoreDorm/:id', verifyToken, dormController.restoreDorm_api)//pass
-router.put('/api/spec/user/:id', verifyToken, userController.updateUser_api)//pass
+router.put('/api/spec/user/:id', verifyToken, upload.single('file'), userController.updateUser_api)//pass
 router.delete('/api/spec/delAccount/:id', verifyToken, userController.deleteAccount_api)//pass
 router.put('/api/spec/banAccount/:id', verifyToken, userController.banAccount_api)//pass
 router.put('/api/spec/unbanAccount/:id', verifyToken, userController.unbanAccount_api)//pass

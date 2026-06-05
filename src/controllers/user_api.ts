@@ -317,7 +317,7 @@ export const getUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const [users] = await dbcon.execute<UserAllGetRes[]>(
-      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
+      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
       [id?.toString().trim()],
     );
     if (users.length > 0) {
@@ -364,8 +364,10 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 export const updateUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { username, phone_number, first_name, last_name } = req.body;
+  const file = req.file;
 
   const conn = await dbcon.getConnection();
+  let publicUrl: string | null = null;
 
   try {
     await conn.beginTransaction();
@@ -406,17 +408,40 @@ export const updateUser_api = async (req: Request, res: Response) => {
 
     const [result] = await conn.execute<ResultSetHeader>(sql, [...params]);
 
-    if (first_name && last_name) {
-      await conn.execute<ResultSetHeader>(
-        "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ? WHERE USER_ID = ?",
-        [first_name, last_name, Number(id)],
+    if (first_name !== undefined && last_name !== undefined) {
+      const [existingOwner] = await conn.execute<RowDataPacket[]>(
+        "SELECT PROFILE_IMAGE FROM DORM_OWNERS WHERE USER_ID = ?",
+        [id]
       );
+
+      let updateOwnerSql = "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ?";
+      const ownerParams: any[] = [first_name, last_name];
+
+      if (file) {
+        if (existingOwner.length > 0 && existingOwner[0]?.PROFILE_IMAGE) {
+           await deleteFromGCS(existingOwner[0].PROFILE_IMAGE).catch(e => console.error("Failed to delete old image", e));
+        }
+        publicUrl = await fileUpload(
+          file,
+          "users",
+          `${username}_${id}`,
+          null,
+          "profile"
+        );
+        updateOwnerSql += ", PROFILE_IMAGE = ?";
+        ownerParams.push(publicUrl);
+      }
+
+      updateOwnerSql += " WHERE USER_ID = ?";
+      ownerParams.push(Number(id));
+
+      await conn.execute<ResultSetHeader>(updateOwnerSql, ownerParams);
     }
 
     await conn.commit();
 
-    if (result.affectedRows > 0 || (first_name && last_name)) {
-      return res.status(200).json({ message: "อัปเดตข้อมูลผู้ใช้สำเร็จ" });
+    if (result.affectedRows > 0 || first_name !== undefined) {
+      return res.status(200).json({ message: "อัปเดตข้อมูลผู้ใช้สำเร็จ", imageUrl: publicUrl });
     } else {
       return res
         .status(404)
@@ -424,6 +449,13 @@ export const updateUser_api = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     await conn.rollback();
+    
+    if (publicUrl) {
+      await deleteFromGCS(publicUrl).catch((err) =>
+        console.error("Failed to delete image:", err),
+      );
+    }
+
     console.error(error);
     if (error.code === "ER_DUP_ENTRY") {
       if (error.sqlMessage && error.sqlMessage.includes("USERS.PHONE_NUMBER")) {
