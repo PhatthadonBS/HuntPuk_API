@@ -317,7 +317,7 @@ export const getUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const [users] = await dbcon.execute<UserAllGetRes[]>(
-      `SELECT USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS FROM USERS WHERE USER_ID = ?`,
+      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
       [id?.toString().trim()],
     );
     if (users.length > 0) {
@@ -363,25 +363,31 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 //ดึงข้อมูลมา ถ้าไม่อันไหนไม่update ให้เอาข้อมูลเก่ายัดใส่แทน (!!!ยัดข้อมูลเก่าตั้งแต่ front เด้อค่อยส่งมา!!!)
 export const updateUser_api = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { username, phone_number } = req.body;
+  const { username, phone_number, first_name, last_name } = req.body;
 
   const conn = await dbcon.getConnection();
 
   try {
+    await conn.beginTransaction();
+
     const [userData] = await conn.query<UserDataPostRes[]>(
       "SELECT * FROM USERS WHERE USER_ID = ?",
       [id],
     );
-    if (!userData || userData.length <= 0)
+    if (!userData || userData.length <= 0) {
+      await conn.rollback();
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
+    }
 
     if (!username || !phone_number) {
+      await conn.rollback();
       return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบ" });
     }
 
     const phone_format = /^0[0-9]{9}$/;
 
     if (!phone_format.test(phone_number)) {
+      await conn.rollback();
       return res.status(400).json({ message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
     }
 
@@ -400,7 +406,16 @@ export const updateUser_api = async (req: Request, res: Response) => {
 
     const [result] = await conn.execute<ResultSetHeader>(sql, [...params]);
 
-    if (result.affectedRows > 0) {
+    if (first_name && last_name) {
+      await conn.execute<ResultSetHeader>(
+        "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ? WHERE USER_ID = ?",
+        [first_name, last_name, Number(id)],
+      );
+    }
+
+    await conn.commit();
+
+    if (result.affectedRows > 0 || (first_name && last_name)) {
       return res.status(200).json({ message: "อัปเดตข้อมูลผู้ใช้สำเร็จ" });
     } else {
       return res
@@ -408,6 +423,7 @@ export const updateUser_api = async (req: Request, res: Response) => {
         .json({ message: "ไม่มีผู้ใช้นี้ในระบบหรือไม่มีการเปลี่ยนแปลง" });
     }
   } catch (error: any) {
+    await conn.rollback();
     console.error(error);
     if (error.code === "ER_DUP_ENTRY") {
       if (error.sqlMessage && error.sqlMessage.includes("USERS.PHONE_NUMBER")) {
@@ -475,7 +491,9 @@ export const unbanAccount_api = async (req: Request, res: Response) => {
     );
 
     if (result.affectedRows > 0) {
-      return res.status(200).json({ message: "บัญชีผู้ใช้ถูกยกเลิกการแบนแล้ว" });
+      return res
+        .status(200)
+        .json({ message: "บัญชีผู้ใช้ถูกยกเลิกการแบนแล้ว" });
     } else {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
@@ -585,6 +603,7 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       x,
       instagram,
       telegram,
+      override,
     } = req.body;
 
     const file = req.file;
@@ -593,35 +612,131 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     const user = users.find((u) => u.USER_ID == Number(user_id));
     if (!user)
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
-    if (!file) {
+
+    // Check if user already has an entry in DORM_OWNERS
+    const [owner] = await conn.execute<DormOwnerGetRes[]>(
+      "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
+      [user_id],
+    );
+
+    const existingOwner = owner[0];
+
+    // If an owner record exists
+    if (existingOwner) {
+      if (existingOwner.REQ_STATUS == 1) {
+        return res.status(409).json({
+          success: false,
+          message: "คุณเป็นเจ้าของหอพักอยู่แล้ว",
+        });
+      }
+
+      // If it's pending (0) or rejected (2)
+      if (existingOwner.REQ_STATUS == 0 || existingOwner.REQ_STATUS == 2) {
+        // If the override flag is true, update the existing record
+        if (override === "true" || override === true) {
+          if (!file) {
+            // Keep old profile image if no new file is uploaded
+            publicUrl = existingOwner.PROFILE_IMAGE;
+          } else {
+            // Delete old image if a new one is provided
+            if (existingOwner.PROFILE_IMAGE) {
+              await deleteFromGCS(existingOwner.PROFILE_IMAGE).catch((e) =>
+                console.error("Failed to delete old image", e),
+              );
+            }
+            publicUrl = await fileUpload(
+              file,
+              "users",
+              `${user.USERNAME}_${user.USER_ID}`,
+              null,
+              "profile",
+            );
+          }
+
+          const lineLink = normalizeLineID(line);
+          const telegramLink = normalizeThaiPhone(telegram);
+
+          const updateSql = `
+            UPDATE DORM_OWNERS 
+            SET FIRST_NAME = ?, LAST_NAME = ?, FACEBOOK = ?, LINE = ?, X = ?, INSTAGRAM = ?, TELEGRAM = ?, PROFILE_IMAGE = ?, REQ_STATUS = 0
+            WHERE USER_ID = ?
+          `;
+          const updateParams = [
+            first_name,
+            last_name,
+            facebook || null,
+            lineLink || null,
+            x || null,
+            instagram || null,
+            telegramLink || null,
+            publicUrl,
+            user_id,
+          ];
+
+          const [updateRes] = await conn.execute<ResultSetHeader>(
+            updateSql,
+            updateParams,
+          );
+
+          if (updateRes.affectedRows > 0) {
+            return res.status(200).json({
+              success: true,
+              message: "อัปเดตคำขอเรียบร้อยแล้ว",
+              imageUrl: publicUrl,
+            });
+          } else {
+            return res.status(400).json({
+              success: false,
+              message: "เกิดข้อผิดพลาดในการอัปเดตคำขอ",
+            });
+          }
+        } else {
+          // If override flag is false/missing and status is 0, prompt the frontend
+          if (existingOwner.REQ_STATUS == 0) {
+            return res.status(409).json({
+              success: false,
+              isPending: true,
+              message:
+                "คุณมีคำขอที่รอการอนุมัติอยู่แล้ว ต้องการส่งคำขอใหม่เพื่อแทนที่คำขอเดิมหรือไม่?",
+            });
+          } else if (existingOwner.REQ_STATUS == 2 && !file) {
+            // For rejected status, if they just want to resubmit without new file, we can do it here
+            const [reqRes] = await conn.execute<ResultSetHeader>(
+              "UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?",
+              [user_id],
+            );
+            if (reqRes.affectedRows > 0)
+              return res.status(200).json({ message: "ส่งคำขอใหม่สำเร็จ" });
+            else
+              return res
+                .status(400)
+                .json({ message: "เกิดข้อผิดพลาดบางประการ" });
+          }
+        }
+      }
+    }
+
+    // If no existing record, a file is mandatory
+    if (!file && !existingOwner) {
       return res.status(400).json({
         success: false,
         message: "ต้องการอัปโหลดรูปโปรไฟล์",
       });
     }
 
-    const [owner] = await conn.execute<DormOwnerGetRes[]>(
-      "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
-      [user_id],
-    );
-    if (owner[0]?.REQ_STATUS == 2) {
-      const [reqRes] = await conn.execute<ResultSetHeader>(
-        "UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?",
-        [user_id],
+    if (file) {
+      publicUrl = await fileUpload(
+        file,
+        "users",
+        `${user.USERNAME}_${user.USER_ID}`,
+        null,
+        "profile",
       );
-
-      if (reqRes.affectedRows > 0)
-        return res.status(200).json({ message: "ส่งคำขอใหม่สำเร็จ" });
-      else return res.status(400).json({ message: "เกิดข้อผิดพลาดบางประการ" });
+    } else if (existingOwner && existingOwner.PROFILE_IMAGE) {
+      publicUrl = existingOwner.PROFILE_IMAGE;
+    } else {
+      publicUrl = ""; // fallback
     }
-
-    publicUrl = await fileUpload(
-      file,
-      "users",
-      `${user.USERNAME}_${user.USER_ID}`,
-      null,
-      "profile",
-    );
 
     const userData: UserDormOwnerReqPostReq = {
       user_id,
@@ -694,10 +809,16 @@ export const approveDormOwner = async (req: Request, res: Response) => {
 
     const status = approve_status == true ? 1 : 2; // 1 = accept, 2 = reject
 
-    const [result] = await conn.execute<ResultSetHeader>(
+    await conn.execute<ResultSetHeader>(
       "UPDATE DORM_OWNERS SET REQ_STATUS = ? WHERE USER_ID = ?;",
       [status, user_id],
     );
+
+    await conn.execute<ResultSetHeader>(
+      "UPDATE USERS SET ROLE_TYPE_ID = 2 WHERE USER_ID = ?;",
+      [user_id],
+    );
+
     await conn.commit();
 
     const subject = "รายงานการส่งคำร้องขอสิทธิ์เป็นเจ้าของหอพัก";

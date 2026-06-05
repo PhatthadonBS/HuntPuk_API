@@ -2,7 +2,7 @@
 import { Request, Response } from "express";
 import { dbcon } from "../database/pool";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { deleteFolder, deleteFromGCS, fileUpload } from "./uploads";
+import { deleteFolder, deleteFromGCS, fileUpload, processAndUploadImages } from "./uploads";
 import { getUser, getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
 import {
@@ -523,41 +523,13 @@ export const createDorm_api = async (req: Request, res: Response) => {
       finalZoneId = zoneRows[0]?.ZONE_ID ?? 1;
     }
  
-    // Upload รูปหลัก (เหมือนเดิมทุกอย่าง)
-    const mainImgTasks = [];
-    if (files["FRONT_DORM_IMG"]?.[0]) {
-      mainImgTasks.push(
-        fileUpload(
-          files["FRONT_DORM_IMG"][0],
-          "dorms",
-          `${name}_${dorm_owner_id}`,
-          null,
-          "FRONT_DORM_IMG",
-        ).then((url) => ({ key: "FRONT_DORM_IMG", url })),
-      );
-    }
-    if (files["LICENSE_IMG"]?.[0]) {
-      mainImgTasks.push(
-        fileUpload(
-          files["LICENSE_IMG"][0],
-          "dorms",
-          `${name}_${dorm_owner_id}`,
-          null,
-          "LICENSE_IMG",
-        ).then((url) => ({ key: "LICENSE_IMG", url })),
-      );
-    }
- 
-    const mainImgs = await Promise.all(mainImgTasks);
-    const frontUrl = mainImgs.find((x) => x.key === "FRONT_DORM_IMG")?.url || "";
-    const licenseUrl = mainImgs.find((x) => x.key === "LICENSE_IMG")?.url || "";
- 
+    // 1. Insert Dormitory FIRST to get dormId
     const sqlDorm = `
       INSERT INTO DORMITORIES 
       (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
        WATER_UNIT, WATER_LUMP, ELECT_UNIT, FRONT_DORM_IMAGE, DORM_LICENSE, ADD_DORM_DATA,
        REQ_STATUS, DORM_STATUS_ID)
-      VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
+      VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, '', '', ?, 0, 1)
     `;
     const pointStr = `POINT(${lat} ${lng})`;
  
@@ -571,11 +543,26 @@ export const createDorm_api = async (req: Request, res: Response) => {
       Number(water_unit) || 0,
       Number(water_lump) || 0,
       Number(elect_unit) || 0,
-      frontUrl,
-      licenseUrl,
       detail || '',
     ]);
     const dormId = dormResult.insertId;
+
+    // 2. Process and Upload All Images
+    let uploadedUrls: Record<string, string | string[]> = {};
+    if (Object.keys(files).length > 0) {
+      uploadedUrls = await processAndUploadImages(files, dormId, dorm_owner_id);
+    }
+
+    // 3. Update Dormitory with main image URLs
+    const frontUrl = (uploadedUrls["FRONT_DORM_IMG"] as string) || "";
+    const licenseUrl = (uploadedUrls["LICENSE_IMG"] as string) || "";
+
+    if (frontUrl || licenseUrl) {
+      await conn.execute(
+        `UPDATE DORMITORIES SET FRONT_DORM_IMAGE = ?, DORM_LICENSE = ? WHERE DORM_ID = ?`,
+        [frontUrl, licenseUrl, dormId]
+      );
+    }
  
     if (facilitiesArr.length > 0) {
       for (const facId of facilitiesArr) {
@@ -586,11 +573,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
       }
     }
  
-    if (files["OTHER_IMG"] && files["OTHER_IMG"].length > 0) {
-      const otherTasks = files["OTHER_IMG"].map((file, idx) =>
-        fileUpload(file, "dorms", `${name}_${dorm_owner_id}`, "other_imgs", `other_${idx}`)
-      );
-      const otherUrls = await Promise.all(otherTasks);
+    // 5. Insert Other Images (Gallery)
+    if (uploadedUrls["OTHER_IMG"]) {
+      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"]) 
+        ? uploadedUrls["OTHER_IMG"] 
+        : [uploadedUrls["OTHER_IMG"]];
+        
       for (const url of otherUrls) {
         await conn.execute(
           `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
@@ -599,21 +587,18 @@ export const createDorm_api = async (req: Request, res: Response) => {
       }
     }
  
+    // 6. Set up room components to be uploaded later
     const roomImgFieldMap: Record<string, number> = {
       CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3,
       BED_IMG: 4, BATHROOM_IMG: 5, BALCONY_IMG: 6,
     };
  
-    const roomUploadTasks = [];
+    const uploadedRoomImgs: {typeId: number, url: string}[] = [];
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
-      if (files[field]?.[0]) {
-        roomUploadTasks.push(
-          fileUpload(files[field][0], "dorms", `${name}_${dorm_owner_id}`, "room_imgs", field)
-            .then((url) => ({ typeId, url })),
-        );
+      if (uploadedUrls[field]) {
+        uploadedRoomImgs.push({ typeId, url: uploadedUrls[field] as string });
       }
     }
-    const uploadedRoomImgs = await Promise.all(roomUploadTasks);
  
     const getBedId = async (name: string): Promise<number> => {
       const n = name?.toString() || '1';
@@ -703,7 +688,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const dormId = Number(id);
   const body = req.body;
-  const files = (req.files as MulterFiles) || {}; // 🌟 ป้องกันบั๊กกรณีไม่ได้แนบรูป
+  const files = (req.files as MulterFiles) || {}; 
 
   const conn = await dbcon.getConnection();
 
@@ -711,7 +696,6 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     await conn.beginTransaction();
     const dormList = await getDormById_fn(dormId, conn);
     
-    // 🌟 ดักจับกรณีหาหอพักไม่เจอ จะได้คืน Connection ให้ระบบ
     if (!dormList || dormList.length === 0) {
       await conn.rollback();
       return res.status(400).json("Dorm not found");
@@ -719,7 +703,13 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     const dormData : any = dormList[0];
     const ownerId = dormData.DORM_OWNER_ID;
 
-    await updateDormInfo_fn(dormId, body, files, conn, ownerId);
+    // Upload all new files using the centralized pipeline
+    let uploadedUrls: Record<string, string | string[]> = {};
+    if (Object.keys(files).length > 0) {
+      uploadedUrls = await processAndUploadImages(files, dormId, ownerId);
+    }
+
+    await updateDormInfo_fn(dormId, body, uploadedUrls, conn);
 
     if (body.facilities) {
       await updateFacilities_fn(dormId, body.facilities, conn);
@@ -729,8 +719,10 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       await updateRoomTypes_fn(dormId, body.roomTypes, conn);
     }
 
-    await updateRoomComponentImages_fn(dormId, body.name, files, conn, ownerId);
-    await updateGalleryImages_fn(dormId, body.name, files, ownerId, conn);
+    if (Object.keys(uploadedUrls).length > 0) {
+      await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
+      await updateGalleryImages_fn(dormId, uploadedUrls, conn);
+    }
 
     await conn.commit();
     res.json({ success: true, message: "อัปเดตข้อมูลหอพักสำเร็จ" });
@@ -750,9 +742,8 @@ export const updateDorm_api = async (req: Request, res: Response) => {
 export const updateDormInfo_fn = async (
   dormId: number,
   data: any,
-  files: MulterFiles,
+  uploadedUrls: Record<string, string | string[]>,
   conn: PoolConnection,
-  ownerId: number,
 ) => {
   let sql = "UPDATE DORMITORIES SET UPDATE_AT = CURRENT_DATE()";
   const params: any[] = [];
@@ -761,7 +752,6 @@ export const updateDormInfo_fn = async (
     [dormId],
   );
 
-  // ✅ แก้ไข: เช็ค !== undefined เพื่อป้องกันเลข 0 ถูกมองว่าเป็นค่าว่าง
   if (data.name !== undefined && data.name !== "") {
     sql += ", DORM_NAME = ?";
     params.push(data.name);
@@ -799,31 +789,17 @@ export const updateDormInfo_fn = async (
     params.push(data.detail);
   }
 
-  if (files["FRONT_DORM_IMG"]?.[0]) {
+  if (uploadedUrls["FRONT_DORM_IMG"]) {
     if (oldData[0]?.FRONT_DORM_IMAGE)
       await deleteFromGCS(oldData[0].FRONT_DORM_IMAGE);
-    const url = await fileUpload(
-      files["FRONT_DORM_IMG"][0],
-      "dorms",
-      `${data.name}_${ownerId}`,
-      null,
-      "FRONT_DORM_IMG",
-    );
     sql += ", FRONT_DORM_IMAGE = ?";
-    params.push(url);
+    params.push(uploadedUrls["FRONT_DORM_IMG"]);
   }
 
-  if (files["LICENSE_IMG"]?.[0]) {
+  if (uploadedUrls["LICENSE_IMG"]) {
     if (oldData[0]?.DORM_LICENSE) await deleteFromGCS(oldData[0].DORM_LICENSE);
-    const url = await fileUpload(
-      files["LICENSE_IMG"][0],
-      "dorms",
-      `${data.name}_${ownerId}`,
-      null,
-      "LICENSE_IMG",
-    );
     sql += ", DORM_LICENSE = ?";
-    params.push(url);
+    params.push(uploadedUrls["LICENSE_IMG"]);
   }
 
   sql += " WHERE DORM_ID = ?";
@@ -957,10 +933,8 @@ let roomTypes: any[] = [];
 
 export const updateRoomComponentImages_fn = async (
   dormId: number,
-  dormName: string,
-  files: MulterFiles,
+  uploadedUrls: Record<string, string | string[]>,
   conn: PoolConnection,
-  ownerId: number,
 ) => {
   const keywords = [
     "CEILING_IMG",
@@ -976,10 +950,8 @@ export const updateRoomComponentImages_fn = async (
     [dormId],
   );
 
-  const uploadTasks = [];
-
   for (const keyword of keywords) {
-    if (files[keyword] && files[keyword][0]) {
+    if (uploadedUrls[keyword]) {
       const oldImgs = existingImages.filter(
         (img: any) => img.IMAGE_PATH && img.IMAGE_PATH.includes(keyword),
       );
@@ -990,44 +962,33 @@ export const updateRoomComponentImages_fn = async (
         ]);
       }
 
-      uploadTasks.push(
-        fileUpload(
-          files[keyword][0],
-          "dorms",
-          `${dormName}_${ownerId}`,
-          "room_imgs",
-          keyword,
-        ).then((url) => ({ url })),
+      await conn.execute(
+        "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)",
+        [dormId, uploadedUrls[keyword] as string],
       );
     }
-  }
-
-  const results = await Promise.all(uploadTasks);
-  for (const res of results) {
-    await conn.execute(
-      "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)",
-      [dormId, res.url],
-    );
   }
 };
 
 export const updateGalleryImages_fn = async (
   dormId: number,
-  dormName: string,
-  files: MulterFiles,
-  ownerId: number,
+  uploadedUrls: Record<string, string | string[]>,
   conn: PoolConnection,
 ) => {
-  if (!files["OTHER_IMG"] || files["OTHER_IMG"].length === 0) return;
+  if (!uploadedUrls["OTHER_IMG"]) return;
 
-  const newFiles = files["OTHER_IMG"];
+  const newUrls = Array.isArray(uploadedUrls["OTHER_IMG"]) 
+    ? uploadedUrls["OTHER_IMG"] 
+    : [uploadedUrls["OTHER_IMG"]];
+
+  if (newUrls.length === 0) return;
 
   const [allImages] = await conn.execute<RowDataPacket[]>(
     "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
     [dormId],
   );
 
-  for (const [i, file] of newFiles.entries()) {
+  for (const [i, newUrl] of newUrls.entries()) {
     const keyword = `other_${i}`;
 
     const oldImg = allImages.find(
@@ -1041,14 +1002,6 @@ export const updateGalleryImages_fn = async (
         oldImg.DORM_IMG_ID,
       ]);
     }
-
-    const newUrl = await fileUpload(
-      file,
-      "dorms",
-      `${dormName}_${ownerId}`,
-      "other_imgs",
-      keyword,
-    );
 
     await conn.execute(
       "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)",

@@ -24,7 +24,8 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "mysql2": "^3.14.4",
-    "nodemailer": "^8.0.6"
+    "nodemailer": "^8.0.6",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -37,6 +38,7 @@
     "@types/node": "^24.3.0",
     "@types/nodemailer": "^7.0.4",
     "@types/nodemon": "^1.19.6",
+    "@types/sharp": "^0.31.1",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
