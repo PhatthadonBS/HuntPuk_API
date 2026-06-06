@@ -55,8 +55,10 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
-                d.UPDATE_AT, -- 🌟 เพิ่มตามขอบเขต: วันที่อัปเดตข้อมูล
-                MIN(rp.PRICE) as start_price -- ราคาเริ่มต้นของหอพัก
+                d.UPDATE_AT,
+                -- ✅ แก้: ดึงเฉพาะราคารายเดือน (PRICE_TYPE_ID = 1) เป็น start_price
+                -- ไม่ใช้ MIN(PRICE) ทั้งหมด เพราะรายวันอาจถูกกว่ารายเดือนทำให้ราคาผิด
+                MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -178,7 +180,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.FRONT_DORM_IMAGE, 
         
         dz.ZONE_NAME,
-        COALESCE(MIN(rp.PRICE), 0) AS start_price,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
         do.LAST_NAME,
