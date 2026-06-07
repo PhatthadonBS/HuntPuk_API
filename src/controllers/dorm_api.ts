@@ -293,7 +293,32 @@ export const getDormById = async (req: Request, res: Response) => {
     const validTermPrices = rooms.map((r: any) => Number(r.perTerm || 0)).filter((p: number) => p > 0);
     const minTermPrice = validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
 
-    const responseData: Partial<DormDetailGetRes> = {
+    const gallery: string[] = [];
+    const roomImgKeywords: Record<string, string> = {
+      ceiling: "ceiling_img",
+      wall: "wall_img",
+      floor: "floor_img",
+      bathroom: "bathroom_img",
+      balcony: "balcony_img",
+    };
+    const roomComponents: Record<string, string> = {};
+
+    images.forEach((img: any) => {
+      const path = img.IMAGE_PATH.toLowerCase();
+      let isRoomPart = false;
+      for (const [kw, field] of Object.entries(roomImgKeywords)) {
+        if (path.includes(kw)) {
+          roomComponents[field] = img.IMAGE_PATH;
+          isRoomPart = true;
+          break;
+        }
+      }
+      if (!isRoomPart) {
+        gallery.push(img.IMAGE_PATH);
+      }
+    });
+
+    const responseData: any = {
       ...mainData,
       DORM_NAME: mainData.DORM_NAME,
       ADDRESS: mainData.ADDRESS,
@@ -307,7 +332,8 @@ export const getDormById = async (req: Request, res: Response) => {
       telegram: mainData.OWNER_TELEGRAM || "-",
       x: mainData.OWNER_X || "-",
       facilities: facilitiesList,
-      gallery: images.map((img: any) => img.IMAGE_PATH),
+      gallery: gallery,
+      ...roomComponents,
       rooms: rooms.map((r: any) => ({
         ROOM_TYPE_ID: r.ROOM_TYPE_ID,
         ROOM_TYPE_NAME: r.ROOM_TYPE_NAME,
@@ -315,6 +341,7 @@ export const getDormById = async (req: Request, res: Response) => {
         perTerm: r.perTerm || 0,
         perDay: r.perDay || 0,
         bedType: r.BED_TYPE_NAME || "-",
+        BED_TYPE_ID: r.BED_TYPE_ID,
       })),
       WATER_UNIT: mainData.WATER_UNIT,
       WATER_LUMP: mainData.WATER_LUMP,
@@ -434,8 +461,9 @@ export const addFacility_api = async (req: Request, res: Response) => {
 };
 
 export const createDormMB_api = async (req: Request, res: Response) => {
+  const tokenUserId = (req as any).user?.id;
   const {
-    user_id,
+    user_id, // Still accept it but prioritize tokenUserId
     name,
     address,
     lat,
@@ -450,7 +478,9 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     roomTypes,
   } = req.body;
 
-  if (!user_id || !name || !address || !lat || !lng) {
+  const finalUserId = tokenUserId || user_id;
+
+  if (!finalUserId || !name || !address || !lat || !lng) {
     return res.status(400).json({ 
       success: false, 
       message: "ข้อมูลที่จำเป็นไม่ครบถ้วน (user_id, name, address, lat, lng)" 
@@ -476,7 +506,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
  
     const [ownerRows] = await conn.execute<RowDataPacket[]>(
       `SELECT DORM_OWNER_ID, REQ_STATUS, FIRST_NAME, LAST_NAME FROM DORM_OWNERS WHERE USER_ID = ? ORDER BY REQ_STATUS ASC, DORM_OWNER_ID DESC`,
-      [user_id]
+      [finalUserId]
     );
  
     let dorm_owner_id: number;
@@ -555,7 +585,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     if (new_fac_name) {
       const [facResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, STATUS, ADD_BY) VALUES (?, 1, ?)`,
-        [new_fac_name, user_id]
+        [new_fac_name, finalUserId]
       );
       const newFacId = facResult.insertId;
       await conn.execute(
@@ -1026,6 +1056,17 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     }
     const dormData : any = dormList[0];
     const ownerId = dormData.DORM_OWNER_ID;
+
+    // Security check: only owner or admin can update
+    const [ownerRows] = await conn.execute<RowDataPacket[]>(
+      "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?",
+      [ownerId]
+    );
+    const tokenUserId = (req as any).user?.id;
+    if (ownerRows[0]?.USER_ID !== tokenUserId && (req as any).user?.role !== 3) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, message: "ไม่มีสิทธิ์แก้ไขหอพักนี้" });
+    }
 
     // Upload all new files using the centralized pipeline
     let uploadedUrls: Record<string, string | string[]> = {};
@@ -1509,7 +1550,7 @@ export const deleteReview_api = async (req: Request, res: Response) => {
 };
 
 export const getDormsByOwner_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const { id } = req.params; // This is USER_ID from frontend
 
   try {
     const sql = `
@@ -1526,11 +1567,12 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     dz.ZONE_NAME,
                     COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
                 FROM DORMITORIES d
+                JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-                WHERE d.DORM_OWNER_ID = ?
+                WHERE do.USER_ID = ?
                 GROUP BY d.DORM_ID
                 ORDER BY d.DORM_ID DESC
     `;
