@@ -73,11 +73,16 @@ router.delete('/api/other/delFavorite', verifyToken, userController.removeFavori
 // ✅ Dormitory group
 router.get('/api/dorms/pendingReq', verifyToken, dormController.getPendingDormReq_api);//pass
 router.get('/api/dorms/zones', dormController.getAllZones); 
+router.get('/api/dorms/dormTypes', dormController.getAllDormTypes);
+router.get('/api/dorms/roomTypes', dormController.getAllRoomTypes);
+router.get('/api/dorms/bedTypes', dormController.getAllBedTypes);
 router.get('/api/dorms', dormController.getAllDorms);    
 router.get('/api/dorms/mobile', dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    
 router.get('/api/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/api/dorms', verifyToken, imgTypeUploads, dormController.createDorm_api);//pass
+router.post('/api/dorms/mobile', verifyToken, dormController.createDormMB_api);
+router.post('/api/dorms/mobile/:id/images', verifyToken, imgTypeUploads, dormController.uploadDormImagesMB_api);
 router.post('/api/dorms/approve', verifyToken, dormController.approveDormReq_api);//pass
 router.post('/api/dorms/facility', verifyToken, upload.single("fac"), dormController.addFacility_api);//pass
 router.get('/api/dorms/facilities', dormController.getFacilities_api);//pass

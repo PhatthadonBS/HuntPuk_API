@@ -19,7 +19,7 @@ export async function processAndUploadImages(
   ownerId: number
 ): Promise<Record<string, string | string[]>> {
   
-  const allowedMimeTypes = ["image/jpeg", "image/png"];
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"]; // Accept webp from frontend if they already convert, but we will convert to webp anyway for consistency and optimization.
   const uploadedUrls: Record<string, string | string[]> = {};
   
   // Create base path: dorms/{dormId}_u{ownerId}/
