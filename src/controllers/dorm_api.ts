@@ -255,7 +255,7 @@ export const getDormById = async (req: Request, res: Response) => {
     );
 
     const [facilitiesData] = await dbcon.query<RowDataPacket[]>(
-      `SELECT ft.FAC_TYPE_NAME, ft.FAC_TYPE_ICON FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ?`,
+      `SELECT ft.FAC_TYPE_NAME, ft.FAC_TYPE_ICON FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ? AND ft.STATUS = 2`,
       [id],
     );
     const facilitiesList = facilitiesData.map((f: any ) => ({
@@ -1836,7 +1836,7 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
 export const getFacilities_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {
-    const sql = `SELECT * FROM FACILITIES_TYPES`;
+    const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 2`;
 
     const [facs] = await conn.query<RowDataPacket[]>(sql);
     if (facs.length > 0) {
@@ -1859,7 +1859,7 @@ export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
     SELECT FD.FAC_DORM_ID, FD.FAC_TYPE_ID, FT.FAC_TYPE_NAME, FT.FAC_TYPE_ICON, FD.DORM_ID 
     FROM FACILITIES_DORMS FD
     JOIN FACILITIES_TYPES FT ON FT.FAC_TYPE_ID = FD.FAC_TYPE_ID
-    WHERE FD.DORM_ID = ?`;
+    WHERE FD.DORM_ID = ? AND FT.STATUS = 2`;
 
     const [facs] = await conn.query<FacOfDormGetRes[]>(sql, [Number(dorm_id)]);
     if (facs.length > 0) {
@@ -1964,6 +1964,7 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
       try {
         const { search, zone, minPrice, maxPrice, lat, lng, radius, score } = req.query;
         const trimmedSearch = search ? search.toString().trim() : "";
+        const userRole = (req as any).user?.role;
 
         let sql = `
                 SELECT 
@@ -1984,6 +1985,12 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
                 WHERE d.DORM_STATUS_ID in (1, 3)
             `;
+
+        if (userRole === 3) {
+          sql += ` AND d.REQ_STATUS IN (0, 1, 2) `;
+        } else {
+          sql += ` AND d.REQ_STATUS = 1 `;
+        }
 
         const params: any[] = [];
 

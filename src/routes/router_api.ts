@@ -5,7 +5,7 @@ import * as userController from '../controllers/user_api';
 import * as dormController from '../controllers/dorm_api';
 import * as testApi from '../controllers/testApi'
 import rateLimit from "express-rate-limit";
-import { verifyToken } from "../middlewares/auth_middleware";
+import { verifyToken, verifyTokenOptional } from "../middlewares/auth_middleware";
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -77,7 +77,7 @@ router.get('/api/dorms/dormTypes', dormController.getAllDormTypes);
 router.get('/api/dorms/roomTypes', dormController.getAllRoomTypes);
 router.get('/api/dorms/bedTypes', dormController.getAllBedTypes);
 router.get('/api/dorms', dormController.getAllDorms);    
-router.get('/api/dorms/mobile', dormController.getAllDormMB);
+router.get('/api/dorms/mobile', verifyTokenOptional, dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    
 router.get('/api/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/api/dorms', verifyToken, imgTypeUploads, dormController.createDorm_api);//pass
