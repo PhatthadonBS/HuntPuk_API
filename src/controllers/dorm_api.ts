@@ -220,25 +220,25 @@ export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const sqlMain = `
-            SELECT 
-                d.*, 
-                ST_X(d.COORDINATES) as lat, 
-                ST_Y(d.COORDINATES) as lng,
-                dz.ZONE_NAME,
-                do.FIRST_NAME, 
-                do.LAST_NAME, 
-                do.LINE as OWNER_LINE,
-                do.FACEBOOK as OWNER_FACEBOOK,
-                do.INSTAGRAM as OWNER_INSTAGRAM,
-                do.TELEGRAM as OWNER_TELEGRAM,
-                do.X as OWNER_X,
-                u.PHONE_NUMBER as OWNER_PHONE 
-            FROM DORMITORIES d
-            LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
-            LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
-            LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
-            WHERE d.DORM_ID = ?
-        `;
+              SELECT 
+        d.*, 
+        ST_X(d.COORDINATES) AS LAT,
+        ST_Y(d.COORDINATES) AS LNG,
+        dz.ZONE_NAME,
+        u.FIRST_NAME, 
+        u.LAST_NAME, 
+        u.PHONE AS OWNER_PHONE, 
+        u.LINE AS OWNER_LINE, 
+        u.FACEBOOK AS OWNER_FACEBOOK, 
+        u.INSTAGRAM AS OWNER_INSTAGRAM, 
+        u.X AS OWNER_X, 
+        u.TELEGRAM AS OWNER_TELEGRAM
+      FROM DORMITORIES d
+      LEFT JOIN DORM_ZONES dz ON d.DORM_ZONE_ID = dz.DORM_ZONE_ID
+      LEFT JOIN DORM_OWNERS do ON d.DORM_ID = do.DORM_ID
+      LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      WHERE d.DORM_ID = ?
+    `;
 
     const [dormInfo] = await dbcon.query<RowDataPacket[]>(sqlMain, [id]);
 
