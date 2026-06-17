@@ -220,22 +220,22 @@ export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const sqlMain = `
-              SELECT 
+      SELECT 
         d.*, 
         ST_X(d.COORDINATES) AS LAT,
         ST_Y(d.COORDINATES) AS LNG,
         dz.ZONE_NAME,
-        u.FIRST_NAME, 
-        u.LAST_NAME, 
-        u.PHONE AS OWNER_PHONE, 
-        u.LINE AS OWNER_LINE, 
-        u.FACEBOOK AS OWNER_FACEBOOK, 
-        u.INSTAGRAM AS OWNER_INSTAGRAM, 
-        u.X AS OWNER_X, 
-        u.TELEGRAM AS OWNER_TELEGRAM
+        do.FIRST_NAME, 
+        do.LAST_NAME, 
+        u.PHONE_NUMBER AS OWNER_PHONE, 
+        do.LINE AS OWNER_LINE, 
+        do.FACEBOOK AS OWNER_FACEBOOK, 
+        do.INSTAGRAM AS OWNER_INSTAGRAM, 
+        do.X AS OWNER_X, 
+        do.TELEGRAM AS OWNER_TELEGRAM
       FROM DORMITORIES d
-      LEFT JOIN DORM_ZONES dz ON d.DORM_ZONE_ID = dz.DORM_ZONE_ID
-      LEFT JOIN DORM_OWNERS do ON d.DORM_ID = do.DORM_ID
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
       WHERE d.DORM_ID = ?
     `;
@@ -347,6 +347,9 @@ export const getDormById = async (req: Request, res: Response) => {
       WATER_LUMP: mainData.WATER_LUMP,
       ELECT_UNIT: mainData.ELECT_UNIT,
       ADD_DORM_DATA: mainData.ADD_DORM_DATA,
+      FIRST_NAME: mainData.FIRST_NAME || "(ไม่ระบุชื่อ)",
+      LAST_NAME: mainData.LAST_NAME || "",
+      USER_ID: mainData.USER_ID,
     };
 
     res.json({ success: true, data: responseData });

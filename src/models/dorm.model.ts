@@ -118,40 +118,47 @@ export interface DormRoomDetail {
     perTerm: number;
     perDay: number;
     bedType: string;
+    BED_TYPE_ID: number;
 }
 
-export interface DormDetailGetRes extends RowDataPacket {
+export interface DormDetail extends RowDataPacket {
     DORM_ID: number;
     DORM_NAME: string;
     ADDRESS: string;
     SCORE: string;
+    image: string;
+    ZONE_ID: number;
+    ZONE_NAME: string;
+    DORM_TYPE_ID: number;
     lat: number;
     lng: number;
-    ZONE_NAME: string;
-    FIRST_NAME: string;
-    LAST_NAME: string;
-    OWNER_LINE: string;
-    OWNER_FACEBOOK: string;
-    OWNER_INSTAGRAM: string;
-    OWNER_TELEGRAM: string;
-    OWNER_X: string;
-    OWNER_PHONE: string;
-    image: string;
-    address: string;
     start_price: number;
-    term_price: number | null;
-    WATER_UNIT: number | null;
-    WATER_LUMP: number | null;
-    ELECT_UNIT: number | null;
+    term_price?: number;
     phone: string;
     line: string;
     facebook: string;
     instagram: string;
     telegram: string;
     x: string;
-    facilities?: { name: string; icon: string }[];
-    gallery?: string[];
-    rooms?: DormRoomDetail[];
-    DORM_STATUS_ID: number;
+    facilities: { name: string; icon: string }[];
+    gallery: string[];
+    ceiling_img?: string;
+    wall_img?: string;
+    floor_img?: string;
+    bathroom_img?: string;
+    balcony_img?: string;
+    rooms: DormRoomDetail[];
+    WATER_UNIT: number;
+    WATER_LUMP: number;
+    ELECT_UNIT: number;
+    ADD_DORM_DATA: string;
+    USER_ID: number;
+    FIRST_NAME: string;
+    LAST_NAME: string;
+}
+
+export interface DormDetailGetRes {
+    success: boolean;
+    data: DormDetail;
 }
  
