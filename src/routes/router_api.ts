@@ -106,6 +106,9 @@ router.get('/api/dorms/review/:id', dormController.getReviewsByDormId_api);//pas
 router.get('/api/dorms/:id', dormController.getDormById);//pass
 router.get('/api/dorms/facility/:dorm_id', dormController.getFacilitiesOfDorm_api);//pass
 router.put('/api/dorms/facility/:user_id', verifyToken, upload.single("icon"), dormController.updateFacility_api);//pass
-
+router.get('/api/admin/facilities/requests', verifyToken, dormController.getFacilityRequests_api);
+router.put('/api/admin/facilities/approve/:fac_id', verifyToken, dormController.approveFacilityRequest_api);
+router.delete('/api/admin/facilities/reject/:fac_id', verifyToken, dormController.rejectFacilityRequest_api);
+router.delete('/api/admin/facilities/:fac_id', verifyToken, dormController.deleteFacility_api);
 
 export default router;
