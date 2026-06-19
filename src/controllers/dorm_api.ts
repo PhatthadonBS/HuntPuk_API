@@ -69,6 +69,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
             LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE d.REQ_STATUS = 1
+            AND d.DORM_STATUS_ID IN (1, 3)
         `;
 
     const queryParams: any[] = [];
@@ -285,7 +286,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
 
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (อัปเดตใหม่ ทนทานต่อการดึงรัวๆ) ---
 export const getDormById = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const sqlMain = `
       SELECT 
@@ -354,7 +355,10 @@ export const getDormById = async (req: Request, res: Response) => {
       [id],
     );
 
-    console.log("=== DEBUG getDormById ROOMS ===", JSON.stringify(rooms, null, 2));
+    console.log(
+      "=== DEBUG getDormById ROOMS ===",
+      JSON.stringify(rooms, null, 2),
+    );
 
     // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
     const validMonthlyPrices = rooms
@@ -431,7 +435,10 @@ export const getDormById = async (req: Request, res: Response) => {
       LAST_NAME: mainData.LAST_NAME || "",
       USER_ID: mainData.USER_ID,
     };
-
+    console.log(
+      "=== DEBUG getDormById responseData ===",
+      JSON.stringify(responseData, null, 2),
+    );
     res.json({ success: true, data: responseData });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
@@ -566,7 +573,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 
   let facilitiesArr: number[] = [];
   let roomTypesArr: any[] = [];
-  let newFacArr: {name: string, icon: string}[] = [];
+  let newFacArr: { name: string; icon: string }[] = [];
   try {
     facilitiesArr =
       typeof facilities === "string"
@@ -576,12 +583,13 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       typeof roomTypes === "string"
         ? JSON.parse(roomTypes || "[]")
         : roomTypes || [];
-    
+
     const { new_facilities } = req.body;
     if (new_facilities) {
-      newFacArr = typeof new_facilities === "string" 
-        ? JSON.parse(new_facilities) 
-        : new_facilities;
+      newFacArr =
+        typeof new_facilities === "string"
+          ? JSON.parse(new_facilities)
+          : new_facilities;
     }
   } catch (e) {
     return res.status(400).json({
@@ -684,12 +692,12 @@ export const createDormMB_api = async (req: Request, res: Response) => {
         if (!fac.name) continue;
         const [facResult] = await conn.execute<ResultSetHeader>(
           `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
-          [fac.name.trim(), fac.icon || null, finalUserId]
+          [fac.name.trim(), fac.icon || null, finalUserId],
         );
         const newFacId = facResult.insertId;
         await conn.execute(
           `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-          [dormId, newFacId]
+          [dormId, newFacId],
         );
       }
     }
@@ -802,7 +810,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 };
 
 export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const dormId = Number(id);
   const files = req.files as MulterFiles;
 
@@ -842,14 +850,23 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
     const licenseUrl = (uploadedUrls["LICENSE_IMG"] as string) || "";
 
     if (frontUrl || licenseUrl) {
+      const [oldMain] = await conn.execute<RowDataPacket[]>(
+        "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?",
+        [dormId],
+      );
+
       let sql = "UPDATE DORMITORIES SET ";
       const updates = [];
       const params = [];
       if (frontUrl) {
+        if (oldMain[0]?.FRONT_DORM_IMAGE)
+          await deleteFromGCS(oldMain[0].FRONT_DORM_IMAGE);
         updates.push("FRONT_DORM_IMAGE = ?");
         params.push(frontUrl);
       }
       if (licenseUrl) {
+        if (oldMain[0]?.DORM_LICENSE)
+          await deleteFromGCS(oldMain[0].DORM_LICENSE);
         updates.push("DORM_LICENSE = ?");
         params.push(licenseUrl);
       }
@@ -898,12 +915,34 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
       BALCONY_IMG: 6,
     };
 
-    for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
-      if (uploadedUrls[field]) {
-        await conn.execute(
-          `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-          [dormId, uploadedUrls[field] as string],
-        );
+    const roomImgFields = Object.keys(roomImgFieldMap);
+    if (roomImgFields.some((field) => uploadedUrls[field])) {
+      const [existingImages] = await conn.execute<RowDataPacket[]>(
+        "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
+        [dormId],
+      );
+
+      for (const field of roomImgFields) {
+        if (uploadedUrls[field]) {
+          const baseName = field.toLowerCase().replace("_img", "");
+          const oldImgs = existingImages.filter(
+            (img: any) =>
+              img.IMAGE_PATH && img.IMAGE_PATH.toLowerCase().includes(baseName),
+          );
+
+          for (const old of oldImgs) {
+            await deleteFromGCS(old.IMAGE_PATH);
+            await conn.execute(
+              "DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?",
+              [old.DORM_IMG_ID],
+            );
+          }
+
+          await conn.execute(
+            `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
+            [dormId, uploadedUrls[field] as string],
+          );
+        }
       }
     }
 
@@ -943,15 +982,16 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
   let facilitiesArr: number[] = [];
   let roomTypesArr: any[] = [];
-  let newFacArr: {name: string, icon: string}[] = [];
+  let newFacArr: { name: string; icon: string }[] = [];
   try {
     facilitiesArr = JSON.parse(facilities || "[]");
     roomTypesArr = JSON.parse(roomTypes || "[]");
     const { new_facilities } = req.body;
     if (new_facilities) {
-      newFacArr = typeof new_facilities === "string" 
-        ? JSON.parse(new_facilities) 
-        : new_facilities;
+      newFacArr =
+        typeof new_facilities === "string"
+          ? JSON.parse(new_facilities)
+          : new_facilities;
     }
   } catch (e) {
     return res.status(400).json({
@@ -1083,12 +1123,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
         if (!fac.name) continue;
         const [facResult] = await conn.execute<ResultSetHeader>(
           `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
-          [fac.name.trim(), fac.icon || null, user_id]
+          [fac.name.trim(), fac.icon || null, user_id],
         );
         const newFacId = facResult.insertId;
         await conn.execute(
           `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-          [dormId, newFacId]
+          [dormId, newFacId],
         );
       }
     }
@@ -1237,7 +1277,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
 };
 
 export const updateDorm_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const dormId = Number(id);
   const body = req.body;
   const files = (req.files as MulterFiles) || {};
@@ -1544,8 +1584,10 @@ export const updateRoomComponentImages_fn = async (
 
   for (const keyword of keywords) {
     if (uploadedUrls[keyword]) {
+      const baseName = keyword.toLowerCase().replace("_img", "");
       const oldImgs = existingImages.filter(
-        (img: any) => img.IMAGE_PATH && img.IMAGE_PATH.includes(keyword),
+        (img: any) =>
+          img.IMAGE_PATH && img.IMAGE_PATH.toLowerCase().includes(baseName),
       );
       for (const old of oldImgs) {
         await deleteFromGCS(old.IMAGE_PATH);
@@ -1603,7 +1645,7 @@ export const updateGalleryImages_fn = async (
 };
 
 export const removeDorm_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const conn = await dbcon.getConnection();
   const userRole = (req as any).user?.role;
 
@@ -1615,20 +1657,24 @@ export const removeDorm_api = async (req: Request, res: Response) => {
       // ลบตารางที่มี Foreign Key เชื่อมกับ DORM_ROOMS ก่อน
       await conn.execute(
         "DELETE rp FROM ROOM_PRICES rp JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
-        [id]
+        [id],
       );
       await conn.execute(
         "DELETE rb FROM ROOM_BEDS rb JOIN DORM_ROOMS dr ON rb.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
-        [id]
+        [id],
       );
 
       // ลบตารางที่เชื่อมกับ DORM_ID
       await conn.execute("DELETE FROM DORM_ROOMS WHERE DORM_ID = ?", [id]);
       await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_ID = ?", [id]);
-      await conn.execute("DELETE FROM FACILITIES_DORMS WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM FACILITIES_DORMS WHERE DORM_ID = ?", [
+        id,
+      ]);
       await conn.execute("DELETE FROM FAVORITES WHERE DORM_ID = ?", [id]);
       await conn.execute("DELETE FROM REVIEWS WHERE DORM_ID = ?", [id]);
-      await conn.execute("DELETE FROM STATISTIC_WEB_VIEW WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM STATISTIC_WEB_VIEW WHERE DORM_ID = ?", [
+        id,
+      ]);
       await conn.execute("DELETE FROM WEB_VIEW_LOGS WHERE DORM_ID = ?", [id]);
 
       // ลบหอพักในตารางหลัก
@@ -1682,7 +1728,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
 };
 
 export const restoreDorm_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const conn = await dbcon.getConnection();
 
   try {
@@ -1774,7 +1820,7 @@ export const addReview_api = async (req: Request, res: Response) => {
 };
 
 export const deleteReview_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const conn = await dbcon.getConnection();
 
   try {
@@ -1825,7 +1871,7 @@ export const deleteReview_api = async (req: Request, res: Response) => {
 };
 
 export const getDormsByOwner_api = async (req: Request, res: Response) => {
-  const { id } = req.params; // This is USER_ID from frontend
+  const id = req.params.id as string; // This is USER_ID from frontend
 
   try {
     const sql = `
@@ -1870,7 +1916,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
 };
 
 export const getReviewsByDormId_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   try {
     const sql = `
@@ -2206,7 +2252,7 @@ export const updateFacility_api = async (req: Request, res: Response) => {
 };
 
 export const changeDormStatus_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { status_id } = req.body; // รับค่า 1 (ว่าง) หรือ 3 (เต็ม)
   const conn = await dbcon.getConnection();
 
@@ -2260,10 +2306,11 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
                 WHERE d.DORM_STATUS_ID in (1, 3)
+
             `;
 
     if (userRole === 3) {
-      sql += ` AND d.REQ_STATUS IN (0, 1, 2) `;
+      sql += ` AND d.REQ_STATUS IN (1, 2) `;
     } else {
       sql += ` AND d.REQ_STATUS = 1 `;
     }
@@ -2410,7 +2457,7 @@ export const approveFacilityRequest_api = async (
   res: Response,
 ) => {
   const conn = await dbcon.getConnection();
-  const { fac_id } = req.params;
+  const fac_id = req.params.fac_id as string;
   try {
     await conn.beginTransaction();
     await conn.execute(
@@ -2440,7 +2487,7 @@ export const rejectFacilityRequest_api = async (
   res: Response,
 ) => {
   const conn = await dbcon.getConnection();
-  const { fac_id } = req.params;
+  const fac_id = req.params.fac_id as string;
   try {
     await conn.beginTransaction();
     await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
@@ -2467,7 +2514,7 @@ export const rejectFacilityRequest_api = async (
 
 export const deleteFacility_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
-  const { fac_id } = req.params;
+  const fac_id = req.params.fac_id as string;
   try {
     await conn.beginTransaction();
     await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [

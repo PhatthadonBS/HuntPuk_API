@@ -314,11 +314,11 @@ export const getUsers_api = async (req: Request, res: Response) => {
 };
 
 export const getUser_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [users] = await dbcon.execute<UserAllGetRes[]>(
       `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
-      [id?.toString().trim()],
+      [id.toString().trim()],
     );
     if (users.length > 0) {
       return res.status(200).json(users[0]);
@@ -362,7 +362,7 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 
 //ดึงข้อมูลมา ถ้าไม่อันไหนไม่update ให้เอาข้อมูลเก่ายัดใส่แทน (!!!ยัดข้อมูลเก่าตั้งแต่ front เด้อค่อยส่งมา!!!)
 export const updateUser_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { username, phone_number, first_name, last_name } = req.body;
   const file = req.file;
 
@@ -475,7 +475,7 @@ export const updateUser_api = async (req: Request, res: Response) => {
 };
 
 export const deleteAccount_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   if (Number(id) == 1)
     return res
       .status(400)
@@ -497,7 +497,7 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
 };
 
 export const banAccount_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [result] = await dbcon.execute<ResultSetHeader>(
       "UPDATE USERS SET ACCOUNT_STATUS = 2 WHERE USER_ID = ?",
@@ -515,7 +515,7 @@ export const banAccount_api = async (req: Request, res: Response) => {
 };
 
 export const unbanAccount_api = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [result] = await dbcon.execute<ResultSetHeader>(
       "UPDATE USERS SET ACCOUNT_STATUS = 0 WHERE USER_ID = ?",
@@ -874,7 +874,7 @@ export const approveDormOwner = async (req: Request, res: Response) => {
 
 export const getMyFavorites_api = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     if (!id) {
       return res.status(400).json({ message: "ต้องการ User ID" });
     }
