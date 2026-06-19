@@ -592,7 +592,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       const newFacId = facResult.insertId;
       await conn.execute(
-        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID) VALUES (?, ?)`,
+        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
         [dormId, newFacId]
       );
     }
@@ -927,7 +927,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       const newFacId = facResult.insertId;
       await conn.execute(
-        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID) VALUES (?, ?)`,
+        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
         [dormId, newFacId]
       );
     }
