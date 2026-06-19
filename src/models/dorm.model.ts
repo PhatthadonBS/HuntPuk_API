@@ -27,6 +27,7 @@ export interface RoomTypeItem {
     bedType: string; 
     perMonth: number;
     perTerm: number;
+    perDay: number;
 }
 
 export interface DormRoomTypeReqPostReq {
@@ -34,6 +35,7 @@ export interface DormRoomTypeReqPostReq {
     bedType: string;  
     perMonth: string | number;
     perTerm: string | number;
+    perDay: string | number;
 }
 
 export interface DormSummary extends RowDataPacket {

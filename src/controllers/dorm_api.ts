@@ -354,9 +354,11 @@ export const getDormById = async (req: Request, res: Response) => {
       [id],
     );
 
+    console.log("=== DEBUG getDormById ROOMS ===", JSON.stringify(rooms, null, 2));
+
     // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
     const validMonthlyPrices = rooms
-      .map((r: any) => Number(r.perMonth || 0))
+      .map((r: any) => Number(r.perMonth || r.permonth || r.PERMONTH || 0))
       .filter((p: number) => p > 0);
     const minPrice =
       validMonthlyPrices.length > 0
@@ -364,7 +366,7 @@ export const getDormById = async (req: Request, res: Response) => {
         : mainData.start_price || 0;
 
     const validTermPrices = rooms
-      .map((r: any) => Number(r.perTerm || 0))
+      .map((r: any) => Number(r.perTerm || r.perterm || r.PERTERM || 0))
       .filter((p: number) => p > 0);
     const minTermPrice =
       validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
@@ -399,6 +401,8 @@ export const getDormById = async (req: Request, res: Response) => {
       DORM_NAME: mainData.DORM_NAME,
       ADDRESS: mainData.ADDRESS,
       image: mainData.FRONT_DORM_IMAGE,
+      lat: mainData.LAT,
+      lng: mainData.LNG,
       start_price: minPrice,
       term_price: minTermPrice,
       phone: mainData.OWNER_PHONE || "-",
@@ -413,9 +417,9 @@ export const getDormById = async (req: Request, res: Response) => {
       rooms: rooms.map((r: any) => ({
         ROOM_TYPE_ID: r.ROOM_TYPE_ID,
         ROOM_TYPE_NAME: r.ROOM_TYPE_NAME,
-        PRICE: r.perMonth || 0,
-        perTerm: r.perTerm || 0,
-        perDay: r.perDay || 0,
+        PRICE: Number(r.perMonth || r.permonth || r.PERMONTH || 0),
+        perTerm: Number(r.perTerm || r.perterm || r.PERTERM || 0),
+        perDay: Number(r.perDay || r.perday || r.PERDAY || 0),
         bedType: r.BED_TYPE_NAME || "-",
         BED_TYPE_ID: r.BED_TYPE_ID,
       })),
@@ -1425,6 +1429,7 @@ export const updateRoomTypes_fn = async (
   const insertedRoomNames = new Set<string>();
 
   // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
+  console.log("=== DEBUG ROOM TYPES ===", JSON.stringify(roomTypes, null, 2));
   for (const room of roomTypes) {
     if (!room.roomType || room.roomType.trim() === "") continue; // ข้ามถ้าไม่ได้กรอกชื่อ
 
