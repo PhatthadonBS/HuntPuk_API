@@ -4,6 +4,7 @@ import express, { Request, Response, NextFunction } from "express";
 import router from "./routes/router_api";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { startMonthlyViewSummaryJob } from "./controllers/cron_jobs";
 
 dotenv.config();
 
@@ -29,7 +30,7 @@ app.use(
   cors({
     origin: "*", // Adjust this to specific domains in production
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
   })
 );
 
@@ -49,6 +50,9 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     error: process.env.NODE_ENV === "development" ? err.message : undefined
   });
 });
+
+// 7. Initialize Cron Jobs
+startMonthlyViewSummaryJob();
 
 const server = http.createServer(app);
 

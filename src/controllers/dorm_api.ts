@@ -355,11 +355,6 @@ export const getDormById = async (req: Request, res: Response) => {
       [id],
     );
 
-    console.log(
-      "=== DEBUG getDormById ROOMS ===",
-      JSON.stringify(rooms, null, 2),
-    );
-
     // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
     const validMonthlyPrices = rooms
       .map((r: any) => Number(r.perMonth || r.permonth || r.PERMONTH || 0))
@@ -435,10 +430,7 @@ export const getDormById = async (req: Request, res: Response) => {
       LAST_NAME: mainData.LAST_NAME || "",
       USER_ID: mainData.USER_ID,
     };
-    console.log(
-      "=== DEBUG getDormById responseData ===",
-      JSON.stringify(responseData, null, 2),
-    );
+
     res.json({ success: true, data: responseData });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
@@ -1487,7 +1479,6 @@ export const updateRoomTypes_fn = async (
   const insertedRoomNames = new Set<string>();
 
   // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
-  console.log("=== DEBUG ROOM TYPES ===", JSON.stringify(roomTypes, null, 2));
   for (const room of roomTypes) {
     if (!room.roomType || room.roomType.trim() === "") continue; // ข้ามถ้าไม่ได้กรอกชื่อ
 
