@@ -2094,3 +2094,66 @@ export const getAllBedTypes = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+export const getFacilityRequests_api = async (req: Request, res: Response) => {
+  const conn = await dbcon.getConnection();
+  try {
+    const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 1`;
+    const [facs] = await conn.query<RowDataPacket[]>(sql);
+    return res.status(200).json({ success: true, data: facs });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const approveFacilityRequest_api = async (req: Request, res: Response) => {
+  const conn = await dbcon.getConnection();
+  const { fac_id } = req.params;
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 2 WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(`UPDATE FACILITIES_DORMS SET STATUS = 1 WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.commit();
+    return res.status(200).json({ success: true, message: "อนุมัติสำเร็จ" });
+  } catch (error: any) {
+    await conn.rollback();
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการอนุมัติ", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const rejectFacilityRequest_api = async (req: Request, res: Response) => {
+  const conn = await dbcon.getConnection();
+  const { fac_id } = req.params;
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.commit();
+    return res.status(200).json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
+  } catch (error: any) {
+    await conn.rollback();
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการปฏิเสธคำร้องขอ", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+export const deleteFacility_api = async (req: Request, res: Response) => {
+  const conn = await dbcon.getConnection();
+  const { fac_id } = req.params;
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.commit();
+    return res.status(200).json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
+  } catch (error: any) {
+    await conn.rollback();
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลบ", error: error.message });
+  } finally {
+    conn.release();
+  }
+};
