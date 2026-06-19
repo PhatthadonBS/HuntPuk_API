@@ -2,7 +2,12 @@
 import { Request, Response } from "express";
 import { dbcon } from "../database/pool";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { deleteFolder, deleteFromGCS, fileUpload, processAndUploadImages } from "./uploads";
+import {
+  deleteFolder,
+  deleteFromGCS,
+  fileUpload,
+  processAndUploadImages,
+} from "./uploads";
 import { getUser, getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
 import {
@@ -25,20 +30,20 @@ export type MulterFiles = {
 export const getAllDorms = async (req: Request, res: Response) => {
   try {
     // รับพารามิเตอร์การกรองและค้นหาจาก Query String
-    const { 
-      search, 
-      zone, 
-      minPrice, 
-      maxPrice, 
-      lat, 
-      lng, 
-      radius, 
-      minScore, 
-      maxWater, 
-      maxElect 
+    const {
+      search,
+      zone,
+      minPrice,
+      maxPrice,
+      lat,
+      lng,
+      radius,
+      minScore,
+      maxWater,
+      maxElect,
     } = req.query;
-    
-    const trimmedSearch = search ? search.toString().trim() : '';
+
+    const trimmedSearch = search ? search.toString().trim() : "";
 
     // โครงสร้างคำสั่ง SQL ดึงข้อมูลพื้นฐานหอพักตามขอบเขตความต้องการ
     let sql = `
@@ -113,7 +118,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
     }
 
     if (havingClauses.length > 0) {
-      sql += ` HAVING ` + havingClauses.join(' AND ');
+      sql += ` HAVING ` + havingClauses.join(" AND ");
     }
 
     // สั่งรัน Query ดึงข้อมูลจากฐานข้อมูล
@@ -129,7 +134,12 @@ export const getAllDorms = async (req: Request, res: Response) => {
       finalDorms = rows.filter((dorm: any) => {
         if (!dorm.lat || !dorm.lng) return false;
         // คำนวณระยะห่างระหว่างจุดอ้างอิงของผู้ใช้กับที่ตั้งหอพัก
-        const distance = calculateHaversineDistance(userLat, userLng, Number(dorm.lat), Number(dorm.lng));
+        const distance = calculateHaversineDistance(
+          userLat,
+          userLng,
+          Number(dorm.lat),
+          Number(dorm.lng),
+        );
         dorm.distance_from_ref = distance; // แนบระยะทางกลับไปให้หน้า Frontend นำไปแสดงผล
         return distance <= maxRadius;
       });
@@ -139,20 +149,31 @@ export const getAllDorms = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: finalDorms });
   } catch (error: any) {
     console.error("Get All Dorms Error:", error);
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักขั้นสูง" });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักขั้นสูง",
+    });
   }
 };
 
 // 🌟 ฟังก์ชันเสริม: คำนวณระยะทางจากเส้นละติจูด/ลองจิจูด (Haversine Formula) คืนค่าเป็นกิโลเมตร
-function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+function calculateHaversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
   const R = 6371; // รัศมีของโลก (กิโลเมตร)
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; 
+  return R * c;
 }
 
 export async function getDormById_fn(did: number, conn: PoolConnection) {
@@ -206,15 +227,62 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error getAllDorms_Admin:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดภายในระบบ",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดภายในระบบ",
+      error: error.message,
+    });
   }
 };
+
+export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
+  try {
+    const sql = `
+      SELECT 
+        d.DORM_ID, 
+        d.DORM_NAME, 
+        d.DORM_STATUS_ID,
+        d.ADDRESS,
+        d.FRONT_DORM_IMAGE, 
+        d.REQ_STATUS,
+        
+        dz.ZONE_NAME,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+
+        do.FIRST_NAME,
+        do.LAST_NAME,
+        u.EMAIL,
+        u.PHONE_NUMBER
+
+      FROM DORMITORIES d
+      LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+      LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
+      LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
+      LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+      
+      WHERE d.REQ_STATUS = 1
+      
+      GROUP BY d.DORM_ID
+      ORDER BY d.DORM_ID DESC
+    `;
+
+    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
+
+    res.json({
+      success: true,
+      data: dorms,
+    });
+  } catch (error: any) {
+    console.error("Error getAllDorms_Admin_Mobile:", error);
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดภายในระบบ",
+      error: error.message,
+    });
+  }
+};
+
 // --- 2. ดูรายละเอียดหอพัก 1 แห่ง (อัปเดตใหม่ ทนทานต่อการดึงรัวๆ) ---
 export const getDormById = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -258,9 +326,9 @@ export const getDormById = async (req: Request, res: Response) => {
       `SELECT ft.FAC_TYPE_NAME, ft.FAC_TYPE_ICON FROM FACILITIES_DORMS fd JOIN FACILITIES_TYPES ft ON fd.FAC_TYPE_ID = ft.FAC_TYPE_ID WHERE fd.DORM_ID = ? AND ft.STATUS = 2`,
       [id],
     );
-    const facilitiesList = facilitiesData.map((f: any ) => ({
+    const facilitiesList = facilitiesData.map((f: any) => ({
       name: f.FAC_TYPE_NAME as string,
-      icon: f.FAC_TYPE_ICON as string
+      icon: f.FAC_TYPE_ICON as string,
     }));
 
     // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay) และประเภทเตียงจากฐานข้อมูล
@@ -287,11 +355,19 @@ export const getDormById = async (req: Request, res: Response) => {
     );
 
     // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
-    const validMonthlyPrices = rooms.map((r: any) => Number(r.perMonth || 0)).filter((p: number) => p > 0);
-    const minPrice = validMonthlyPrices.length > 0 ? Math.min(...validMonthlyPrices) : (mainData.start_price || 0);
+    const validMonthlyPrices = rooms
+      .map((r: any) => Number(r.perMonth || 0))
+      .filter((p: number) => p > 0);
+    const minPrice =
+      validMonthlyPrices.length > 0
+        ? Math.min(...validMonthlyPrices)
+        : mainData.start_price || 0;
 
-    const validTermPrices = rooms.map((r: any) => Number(r.perTerm || 0)).filter((p: number) => p > 0);
-    const minTermPrice = validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
+    const validTermPrices = rooms
+      .map((r: any) => Number(r.perTerm || 0))
+      .filter((p: number) => p > 0);
+    const minTermPrice =
+      validTermPrices.length > 0 ? Math.min(...validTermPrices) : null;
 
     const gallery: string[] = [];
     const roomImgKeywords: Record<string, string> = {
@@ -355,13 +431,11 @@ export const getDormById = async (req: Request, res: Response) => {
     res.json({ success: true, data: responseData });
   } catch (error: any) {
     console.error("!!! Error in getDormById !!!", error);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดภายในระบบ",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดภายในระบบ",
+      error: error.message,
+    });
   }
 };
 export const getAllZones = async (req: Request, res: Response) => {
@@ -410,12 +484,10 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
 
     if (limitAdd[0]!["count"] >= 3)
-      return res
-        .status(200)
-        .json({
-          success: false,
-          message: "ขีดจำกัดในการเพิ่มสิ่งอำนวยความสะดวกเต็มแล้ว",
-        });
+      return res.status(200).json({
+        success: false,
+        message: "ขีดจำกัดในการเพิ่มสิ่งอำนวยความสะดวกเต็มแล้ว",
+      });
 
     const [dupFac] = await conn.execute<RowDataPacket[]>(
       "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
@@ -451,13 +523,11 @@ export const addFacility_api = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     conn.rollback();
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดภายในระบบ",
-        error: error.message,
-      });
+    return res.status(400).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดภายในระบบ",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -484,74 +554,87 @@ export const createDormMB_api = async (req: Request, res: Response) => {
   const finalUserId = tokenUserId || user_id;
 
   if (!finalUserId || !name || !address || !lat || !lng) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "ข้อมูลที่จำเป็นไม่ครบถ้วน (user_id, name, address, lat, lng)" 
+    return res.status(400).json({
+      success: false,
+      message: "ข้อมูลที่จำเป็นไม่ครบถ้วน (user_id, name, address, lat, lng)",
     });
   }
- 
+
   let facilitiesArr: number[] = [];
   let roomTypesArr: any[] = [];
   try {
-    facilitiesArr = typeof facilities === 'string' ? JSON.parse(facilities || "[]") : (facilities || []);
-    roomTypesArr = typeof roomTypes === 'string' ? JSON.parse(roomTypes || "[]") : (roomTypes || []);
+    facilitiesArr =
+      typeof facilities === "string"
+        ? JSON.parse(facilities || "[]")
+        : facilities || [];
+    roomTypesArr =
+      typeof roomTypes === "string"
+        ? JSON.parse(roomTypes || "[]")
+        : roomTypes || [];
   } catch (e) {
     return res.status(400).json({
       success: false,
       message: "ข้อมูลสิ่งอำนวยความสะดวกหรือประเภทห้องพักไม่ถูกต้อง",
     });
   }
- 
+
   const conn = await dbcon.getConnection();
- 
+
   try {
     await conn.beginTransaction();
- 
+
     const [ownerRows] = await conn.execute<RowDataPacket[]>(
       `SELECT DORM_OWNER_ID, REQ_STATUS, FIRST_NAME, LAST_NAME FROM DORM_OWNERS WHERE USER_ID = ? ORDER BY REQ_STATUS ASC, DORM_OWNER_ID DESC`,
-      [finalUserId]
+      [finalUserId],
     );
- 
+
     let dorm_owner_id: number;
-    const activeOwner = ownerRows.find((r: any) => r.REQ_STATUS === 1 || r.REQ_STATUS === 0);
- 
+    const activeOwner = ownerRows.find(
+      (r: any) => r.REQ_STATUS === 1 || r.REQ_STATUS === 0,
+    );
+
     if (activeOwner) {
       dorm_owner_id = activeOwner.DORM_OWNER_ID;
     } else {
       const [userRows] = await conn.execute<RowDataPacket[]>(
         `SELECT USERNAME, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?`,
-        [user_id]
+        [user_id],
       );
- 
+
       if (userRows.length === 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: "ไม่พบบัญชีผู้ใช้ในระบบ" });
+        return res
+          .status(400)
+          .json({ success: false, message: "ไม่พบบัญชีผู้ใช้ในระบบ" });
       }
- 
+
       const username = userRows[0]!.USERNAME;
       const firstName = ownerRows[0]?.FIRST_NAME || username;
-      const lastName = ownerRows[0]?.LAST_NAME || '(New Request)';
+      const lastName = ownerRows[0]?.LAST_NAME || "(New Request)";
 
       const [insertOwner] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_OWNERS 
            (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE)
          VALUES (?, ?, ?, 0, '')`,
-        [user_id, firstName, lastName]
+        [user_id, firstName, lastName],
       );
       dorm_owner_id = insertOwner.insertId;
     }
- 
+
     let finalZoneId = Number(zone_id) || 0;
     if (!finalZoneId) {
       const pointStr2 = `POINT(${lat} ${lng})`;
-      const [zoneRows] = await conn.query<RowDataPacket[]>(`
+      const [zoneRows] = await conn.query<RowDataPacket[]>(
+        `
         SELECT ZONE_ID,
           ST_Distance_Sphere(COORDINATES, POINT(ST_X(ST_GeomFromText(?)), ST_Y(ST_GeomFromText(?)))) AS dist
         FROM DORM_ZONES ORDER BY dist ASC LIMIT 1
-      `, [pointStr2, pointStr2]);
+      `,
+        [pointStr2, pointStr2],
+      );
       finalZoneId = zoneRows[0]?.ZONE_ID ?? 1;
     }
- 
+
     const sqlDorm = `
       INSERT INTO DORMITORIES 
       (DORM_OWNER_ID, DORM_NAME, ADDRESS, COORDINATES, ZONE_ID, DORM_TYPE_ID, 
@@ -560,7 +643,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       VALUES (?, ?, ?, ST_GeomFromText(?), ?, ?, ?, ?, ?, '', '', ?, 0, 1)
     `;
     const pointStr = `POINT(${lat} ${lng})`;
- 
+
     const [dormResult] = await conn.execute<ResultSetHeader>(sqlDorm, [
       dorm_owner_id,
       name,
@@ -571,7 +654,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       Number(water_unit) || 0,
       Number(water_lump) || 0,
       Number(elect_unit) || 0,
-      detail || '',
+      detail || "",
     ]);
     const dormId = dormResult.insertId;
 
@@ -588,85 +671,116 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     if (new_fac_name) {
       const [facResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, STATUS, ADD_BY) VALUES (?, 1, ?)`,
-        [new_fac_name, finalUserId]
+        [new_fac_name, finalUserId],
       );
       const newFacId = facResult.insertId;
       await conn.execute(
         `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-        [dormId, newFacId]
+        [dormId, newFacId],
       );
     }
- 
+
     const getBedId = async (name: string): Promise<number> => {
-      const n = name?.toString() || '1';
+      const n = name?.toString() || "1";
       return parseInt(n) || 1;
     };
- 
+
     const insertedRoomNames = new Set<string>();
- 
+
     for (const room of roomTypesArr) {
-      if (!room.roomType || room.roomType.trim() === '') continue;
- 
+      if (!room.roomType || room.roomType.trim() === "") continue;
+
       let roomName = room.roomType.trim();
- 
+
       if (insertedRoomNames.has(roomName)) {
-        const bedSuffix = (room.bedType === '3' || room.bedType === '4') ? 'เตียงคู่' : 'เตียงเดี่ยว';
+        const bedSuffix =
+          room.bedType === "3" || room.bedType === "4"
+            ? "เตียงคู่"
+            : "เตียงเดี่ยว";
         roomName = `${roomName} (${bedSuffix})`;
       }
       if (insertedRoomNames.has(roomName)) continue;
       insertedRoomNames.add(roomName);
- 
+
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
-        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
+        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
+        [roomName],
       );
       if (existingRt.length > 0) {
         roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
       } else {
         const [rtResult] = await conn.execute<ResultSetHeader>(
-          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [roomName]
+          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
+          [roomName],
         );
         roomTypeId = rtResult.insertId;
       }
- 
+
       const [existingDr] = await conn.execute<RowDataPacket[]>(
         `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
-        [dormId, roomTypeId]
+        [dormId, roomTypeId],
       );
       if (existingDr.length > 0) continue;
- 
+
       const [drResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
+        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
+        [dormId, roomTypeId],
       );
       const dormRoomId = drResult.insertId;
- 
-      if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '' && Number(room.perMonth) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
+
+      if (
+        room.perMonth !== null &&
+        room.perMonth !== undefined &&
+        room.perMonth !== "" &&
+        Number(room.perMonth) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+          [dormRoomId, room.perMonth],
+        );
       }
-      if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '' && Number(room.perTerm) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
+      if (
+        room.perTerm !== null &&
+        room.perTerm !== undefined &&
+        room.perTerm !== "" &&
+        Number(room.perTerm) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+          [dormRoomId, room.perTerm],
+        );
       }
-      if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '' && Number(room.perDay) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
+      if (
+        room.perDay !== null &&
+        room.perDay !== undefined &&
+        room.perDay !== "" &&
+        Number(room.perDay) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+          [dormRoomId, room.perDay],
+        );
       }
- 
+
       const bedTypeId = await getBedId(room.bedType);
       await conn.execute(
         `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
-        [dormRoomId, bedTypeId]
+        [dormRoomId, bedTypeId],
       );
     }
- 
+
     await conn.commit();
-    res.status(201).json({ success: true, message: "ลงทะเบียนข้อมูลหอพักสำเร็จ", dormId });
- 
+    res
+      .status(201)
+      .json({ success: true, message: "ลงทะเบียนข้อมูลหอพักสำเร็จ", dormId });
   } catch (error: any) {
     console.error("Transaction Error:", error);
     await conn.rollback();
     res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก",
-      error: error.message
+      error: error.message,
     });
   } finally {
     conn.release();
@@ -679,7 +793,9 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
   const files = req.files as MulterFiles;
 
   if (!files || Object.keys(files).length === 0) {
-    return res.status(400).json({ success: false, message: "ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด" });
+    return res
+      .status(400)
+      .json({ success: false, message: "ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด" });
   }
 
   const conn = await dbcon.getConnection();
@@ -689,12 +805,14 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
 
     const [dormRows] = await conn.execute<RowDataPacket[]>(
       "SELECT DORM_OWNER_ID FROM DORMITORIES WHERE DORM_ID = ?",
-      [dormId]
+      [dormId],
     );
 
     if (dormRows.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: "ไม่พบหอพักที่ระบุ" });
+      return res
+        .status(404)
+        .json({ success: false, message: "ไม่พบหอพักที่ระบุ" });
     }
 
     const dorm_owner_id = dormRows[0]!.DORM_OWNER_ID;
@@ -713,12 +831,18 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
       let sql = "UPDATE DORMITORIES SET ";
       const updates = [];
       const params = [];
-      if (frontUrl) { updates.push("FRONT_DORM_IMAGE = ?"); params.push(frontUrl); }
-      if (licenseUrl) { updates.push("DORM_LICENSE = ?"); params.push(licenseUrl); }
-      
+      if (frontUrl) {
+        updates.push("FRONT_DORM_IMAGE = ?");
+        params.push(frontUrl);
+      }
+      if (licenseUrl) {
+        updates.push("DORM_LICENSE = ?");
+        params.push(licenseUrl);
+      }
+
       sql += updates.join(", ") + " WHERE DORM_ID = ?";
       params.push(dormId);
-      
+
       await conn.execute(sql, params);
     }
 
@@ -726,22 +850,23 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
     const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
     if (facIconUrl) {
       const [userRows] = await conn.execute<RowDataPacket[]>(
-        "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?", [dorm_owner_id]
+        "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?",
+        [dorm_owner_id],
       );
       if (userRows.length > 0) {
         await conn.execute(
           "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND FAC_TYPE_ICON IS NULL ORDER BY FAC_TYPE_ID DESC LIMIT 1",
-          [facIconUrl, userRows[0]!.USER_ID]
+          [facIconUrl, userRows[0]!.USER_ID],
         );
       }
     }
 
     // 5. Insert Other Images (Gallery)
     if (uploadedUrls["OTHER_IMG"]) {
-      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"]) 
-        ? uploadedUrls["OTHER_IMG"] 
+      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
+        ? uploadedUrls["OTHER_IMG"]
         : [uploadedUrls["OTHER_IMG"]];
-        
+
       for (const url of otherUrls) {
         await conn.execute(
           `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
@@ -749,32 +874,34 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
         );
       }
     }
- 
+
     // 6. Set up room components images
     const roomImgFieldMap: Record<string, number> = {
-      CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3,
-      BATHROOM_IMG: 5, BALCONY_IMG: 6,
+      CEILING_IMG: 1,
+      WALL_IMG: 2,
+      FLOOR_IMG: 3,
+      BATHROOM_IMG: 5,
+      BALCONY_IMG: 6,
     };
- 
+
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
       if (uploadedUrls[field]) {
         await conn.execute(
           `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-          [dormId, uploadedUrls[field] as string]
+          [dormId, uploadedUrls[field] as string],
         );
       }
     }
 
     await conn.commit();
     res.status(200).json({ success: true, message: "อัปโหลดรูปภาพสำเร็จ" });
-
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     await conn.rollback();
     res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ",
-      error: error.message
+      error: error.message,
     });
   } finally {
     conn.release();
@@ -819,7 +946,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     const [ownerRows] = await conn.execute<RowDataPacket[]>(
       `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ?`,
-      [user_id]
+      [user_id],
     );
 
     let dorm_owner_id: number;
@@ -827,12 +954,14 @@ export const createDorm_api = async (req: Request, res: Response) => {
     if (ownerRows.length === 0) {
       const [userRows] = await conn.execute<RowDataPacket[]>(
         `SELECT USERNAME, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?`,
-        [user_id]
+        [user_id],
       );
 
       if (userRows.length === 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: "ไม่พบบัญชีผู้ใช้ในระบบ" });
+        return res
+          .status(400)
+          .json({ success: false, message: "ไม่พบบัญชีผู้ใช้ในระบบ" });
       }
 
       const roleId = userRows[0]!.ROLE_TYPE_ID;
@@ -840,7 +969,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       if (roleId !== 2 && roleId !== 3) {
         await conn.rollback();
-        return res.status(403).json({ success: false, message: "บัญชีนี้ไม่มีสิทธิ์ลงทะเบียนหอพัก" });
+        return res.status(403).json({
+          success: false,
+          message: "บัญชีนี้ไม่มีสิทธิ์ลงทะเบียนหอพัก",
+        });
       }
 
       if (roleId === 3) {
@@ -848,12 +980,16 @@ export const createDorm_api = async (req: Request, res: Response) => {
           `INSERT INTO DORM_OWNERS 
              (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, REQ_STATUS, PROFILE_IMAGE)
            VALUES (?, ?, '(Admin)', NULL, NULL, NULL, NULL, NULL, 1, '')`,
-          [user_id, username]
+          [user_id, username],
         );
         dorm_owner_id = insertOwner.insertId;
       } else {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: "ไม่พบข้อมูลสิทธิ์เจ้าของหอพัก กรุณาลงทะเบียนเป็นเจ้าของหอพักก่อน" });
+        return res.status(400).json({
+          success: false,
+          message:
+            "ไม่พบข้อมูลสิทธิ์เจ้าของหอพัก กรุณาลงทะเบียนเป็นเจ้าของหอพักก่อน",
+        });
       }
     } else {
       dorm_owner_id = ownerRows[0]!.DORM_OWNER_ID;
@@ -862,11 +998,14 @@ export const createDorm_api = async (req: Request, res: Response) => {
     let finalZoneId = Number(zone_id) || 0;
     if (!finalZoneId) {
       const pointStr2 = `POINT(${lat} ${lng})`;
-      const [zoneRows] = await conn.query<RowDataPacket[]>(`
+      const [zoneRows] = await conn.query<RowDataPacket[]>(
+        `
         SELECT ZONE_ID,
           ST_Distance_Sphere(COORDINATES, POINT(ST_X(ST_GeomFromText(?)), ST_Y(ST_GeomFromText(?)))) AS dist
         FROM DORM_ZONES ORDER BY dist ASC LIMIT 1
-      `, [pointStr2, pointStr2]);
+      `,
+        [pointStr2, pointStr2],
+      );
       finalZoneId = zoneRows[0]?.ZONE_ID ?? 1;
     }
 
@@ -889,7 +1028,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
       Number(water_unit) || 0,
       Number(water_lump) || 0,
       Number(elect_unit) || 0,
-      detail || '',
+      detail || "",
     ]);
     const dormId = dormResult.insertId;
 
@@ -904,7 +1043,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
     if (frontUrl || licenseUrl) {
       await conn.execute(
         `UPDATE DORMITORIES SET FRONT_DORM_IMAGE = ?, DORM_LICENSE = ? WHERE DORM_ID = ?`,
-        [frontUrl, licenseUrl, dormId]
+        [frontUrl, licenseUrl, dormId],
       );
     }
 
@@ -923,20 +1062,20 @@ export const createDorm_api = async (req: Request, res: Response) => {
     if (new_fac_name) {
       const [facResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
-        [new_fac_name, facIconUrl || null, user_id]
+        [new_fac_name, facIconUrl || null, user_id],
       );
       const newFacId = facResult.insertId;
       await conn.execute(
         `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-        [dormId, newFacId]
+        [dormId, newFacId],
       );
     }
 
     if (uploadedUrls["OTHER_IMG"]) {
-      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"]) 
-        ? uploadedUrls["OTHER_IMG"] 
+      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
+        ? uploadedUrls["OTHER_IMG"]
         : [uploadedUrls["OTHER_IMG"]];
-        
+
       for (const url of otherUrls) {
         await conn.execute(
           `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
@@ -946,11 +1085,15 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
 
     const roomImgFieldMap: Record<string, number> = {
-      CEILING_IMG: 1, WALL_IMG: 2, FLOOR_IMG: 3,
-      BED_IMG: 4, BATHROOM_IMG: 5, BALCONY_IMG: 6,
+      CEILING_IMG: 1,
+      WALL_IMG: 2,
+      FLOOR_IMG: 3,
+      BED_IMG: 4,
+      BATHROOM_IMG: 5,
+      BALCONY_IMG: 6,
     };
 
-    const uploadedRoomImgs: {typeId: number, url: string}[] = [];
+    const uploadedRoomImgs: { typeId: number; url: string }[] = [];
     for (const [field, typeId] of Object.entries(roomImgFieldMap)) {
       if (uploadedUrls[field]) {
         uploadedRoomImgs.push({ typeId, url: uploadedUrls[field] as string });
@@ -958,19 +1101,22 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
 
     const getBedId = async (name: string): Promise<number> => {
-      const n = name?.toString() || '1';
+      const n = name?.toString() || "1";
       return parseInt(n) || 1;
     };
 
     const insertedRoomNames = new Set<string>();
 
     for (const room of roomTypesArr) {
-      if (!room.roomType || room.roomType.trim() === '') continue;
+      if (!room.roomType || room.roomType.trim() === "") continue;
 
       let roomName = room.roomType.trim();
 
       if (insertedRoomNames.has(roomName)) {
-        const bedSuffix = (room.bedType === '3' || room.bedType === '4') ? 'เตียงคู่' : 'เตียงเดี่ยว';
+        const bedSuffix =
+          room.bedType === "3" || room.bedType === "4"
+            ? "เตียงคู่"
+            : "เตียงเดี่ยว";
         roomName = `${roomName} (${bedSuffix})`;
       }
       if (insertedRoomNames.has(roomName)) continue;
@@ -978,97 +1124,129 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
-        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
+        `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
+        [roomName],
       );
       if (existingRt.length > 0) {
         roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
       } else {
         const [rtResult] = await conn.execute<ResultSetHeader>(
-          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [roomName]
+          `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
+          [roomName],
         );
         roomTypeId = rtResult.insertId;
       }
 
       const [existingDr] = await conn.execute<RowDataPacket[]>(
         `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
-        [dormId, roomTypeId]
+        [dormId, roomTypeId],
       );
       if (existingDr.length > 0) continue;
 
       const [drResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
+        `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
+        [dormId, roomTypeId],
       );
       const dormRoomId = drResult.insertId;
 
-      if (room.perMonth !== null && room.perMonth !== undefined && room.perMonth !== '' && Number(room.perMonth) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
+      if (
+        room.perMonth !== null &&
+        room.perMonth !== undefined &&
+        room.perMonth !== "" &&
+        Number(room.perMonth) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+          [dormRoomId, room.perMonth],
+        );
       }
-      if (room.perTerm !== null && room.perTerm !== undefined && room.perTerm !== '' && Number(room.perTerm) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
+      if (
+        room.perTerm !== null &&
+        room.perTerm !== undefined &&
+        room.perTerm !== "" &&
+        Number(room.perTerm) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+          [dormRoomId, room.perTerm],
+        );
       }
-      if (room.perDay !== null && room.perDay !== undefined && room.perDay !== '' && Number(room.perDay) > 0) {
-        await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
+      if (
+        room.perDay !== null &&
+        room.perDay !== undefined &&
+        room.perDay !== "" &&
+        Number(room.perDay) > 0
+      ) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+          [dormRoomId, room.perDay],
+        );
       }
 
       const bedTypeId = await getBedId(room.bedType);
       await conn.execute(
         `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
-        [dormRoomId, bedTypeId]
+        [dormRoomId, bedTypeId],
       );
     }
 
     for (const img of uploadedRoomImgs) {
       await conn.execute(
         `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-        [dormId, img.url]
+        [dormId, img.url],
       );
     }
 
     await conn.commit();
-    res.status(201).json({ success: true, message: "ลงทะเบียนหอพักสำเร็จ", dormId });
-
+    res
+      .status(201)
+      .json({ success: true, message: "ลงทะเบียนหอพักสำเร็จ", dormId });
   } catch (error: any) {
     console.error("Transaction Error:", error);
     await conn.rollback();
     res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการลงทะเบียนหอพัก",
-      error: error.message
+      error: error.message,
     });
   } finally {
     conn.release();
   }
 };
 
-
 export const updateDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const dormId = Number(id);
   const body = req.body;
-  const files = (req.files as MulterFiles) || {}; 
+  const files = (req.files as MulterFiles) || {};
 
   const conn = await dbcon.getConnection();
 
   try {
     await conn.beginTransaction();
     const dormList = await getDormById_fn(dormId, conn);
-    
+
     if (!dormList || dormList.length === 0) {
       await conn.rollback();
       return res.status(400).json("Dorm not found");
     }
-    const dormData : any = dormList[0];
+    const dormData: any = dormList[0];
     const ownerId = dormData.DORM_OWNER_ID;
 
     // Security check: only owner or admin can update
     const [ownerRows] = await conn.execute<RowDataPacket[]>(
       "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?",
-      [ownerId]
+      [ownerId],
     );
     const tokenUserId = (req as any).user?.id;
-    if (ownerRows[0]?.USER_ID !== tokenUserId && (req as any).user?.role !== 3) {
+    if (
+      ownerRows[0]?.USER_ID !== tokenUserId &&
+      (req as any).user?.role !== 3
+    ) {
       await conn.rollback();
-      return res.status(403).json({ success: false, message: "ไม่มีสิทธิ์แก้ไขหอพักนี้" });
+      return res
+        .status(403)
+        .json({ success: false, message: "ไม่มีสิทธิ์แก้ไขหอพักนี้" });
     }
 
     // Upload all new files using the centralized pipeline
@@ -1098,10 +1276,10 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     await conn.rollback();
     console.error("Update Error:", error);
     res.status(500).json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการอัปเดตข้อมูลหอพัก",
-        error: error.message,
-      });
+      success: false,
+      message: "เกิดข้อผิดพลาดในการอัปเดตข้อมูลหอพัก",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -1203,16 +1381,16 @@ export const updateFacilities_fn = async (
 export const updateRoomTypes_fn = async (
   dormId: number,
   roomTypesJson: string,
-  conn: PoolConnection
+  conn: PoolConnection,
 ) => {
   const getBedId = (name: string): number => {
-    const n = name?.toString().toLowerCase() || '';
+    const n = name?.toString().toLowerCase() || "";
     if (n.includes("single") || n === "1") return 1;
     if (n.includes("double") || n === "2") return 2;
     return 1;
   };
 
-let roomTypes: any[] = [];
+  let roomTypes: any[] = [];
   try {
     roomTypes = JSON.parse(roomTypesJson);
   } catch (e) {
@@ -1222,80 +1400,103 @@ let roomTypes: any[] = [];
   if (!roomTypes || roomTypes.length === 0) return;
 
   // 🌟 1. ล้างข้อมูลเก่าแบบ 100% (แก้บั๊ก Error 500: ทยอยลบจากลูกไปหาแม่ ปลอดภัยชัวร์!)
-  await conn.execute(`
+  await conn.execute(
+    `
     DELETE rp FROM ROOM_PRICES rp 
     JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID 
     WHERE dr.DORM_ID = ?
-  `, [dormId]);
-  
-  await conn.execute(`
+  `,
+    [dormId],
+  );
+
+  await conn.execute(
+    `
     DELETE rb FROM ROOM_BEDS rb 
     JOIN DORM_ROOMS dr ON rb.DORM_ROOM_ID = dr.DORM_ROOM_ID 
     WHERE dr.DORM_ID = ?
-  `, [dormId]);
+  `,
+    [dormId],
+  );
 
   // ลบตารางแม่ได้อย่างปลอดภัย
   await conn.execute(`DELETE FROM DORM_ROOMS WHERE DORM_ID = ?`, [dormId]);
-
 
   // 🌟 พระเอกคนใหม่: ใช้ Set เพื่อเก็บ "ชื่อห้อง" แทน ID
   const insertedRoomNames = new Set<string>();
 
   // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
   for (const room of roomTypes) {
-    if (!room.roomType || room.roomType.trim() === '') continue; // ข้ามถ้าไม่ได้กรอกชื่อ
+    if (!room.roomType || room.roomType.trim() === "") continue; // ข้ามถ้าไม่ได้กรอกชื่อ
 
     let roomName = room.roomType.trim();
 
     // 🌟 ระบบสุดฉลาด: ถ้าเจอชื่อห้องซ้ำกันในรอบการบันทึกนี้ ให้ดึงประเภทเตียงมาต่อท้ายชื่อห้องอัตโนมัติ!
     if (insertedRoomNames.has(roomName)) {
-       const bedSuffix = (room.bedType === 'Double Bed' || room.bedType === '2') ? 'เตียงคู่' : 'เตียงเดี่ยว';
-       roomName = `${roomName} (${bedSuffix})`;
+      const bedSuffix =
+        room.bedType === "Double Bed" || room.bedType === "2"
+          ? "เตียงคู่"
+          : "เตียงเดี่ยว";
+      roomName = `${roomName} (${bedSuffix})`;
     }
 
     // ถ้าแอบต่อท้ายแล้วยังซ้ำอีก (เช่น ผู้ใช้กดส่ง "ห้องพัดลมเตียงคู่" มา 2 กล่องเป๊ะๆ) อันนี้ต้องข้ามของจริงเพื่อกันพัง
     if (insertedRoomNames.has(roomName)) {
-       continue; 
+      continue;
     }
     insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
     let roomTypeId;
-    
+
     // เช็คว่ามีชื่อห้องนี้อยู่ในระบบภาพรวมหรือยัง (เช็คจาก roomName ที่อาจจะถูกเติมคำแล้ว)
     const [existingRt] = await conn.execute<RowDataPacket[]>(
-      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`, [roomName]
+      `SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ?`,
+      [roomName],
     );
-    
+
     if (existingRt.length > 0) {
       roomTypeId = existingRt[0]!.ROOM_TYPE_ID;
     } else {
       const [rtResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`, [roomName]
+        `INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)`,
+        [roomName],
       );
       roomTypeId = rtResult.insertId;
     }
 
     // สร้างสะพานเชื่อมระหว่าง หอพัก <-> ประเภทห้อง
     const [drResult] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`, [dormId, roomTypeId]
+      `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
+      [dormId, roomTypeId],
     );
     const dormRoomId = drResult.insertId;
 
-// เพิ่มราคา
+    // เพิ่มราคา
     if (room.perMonth !== null && room.perMonth !== undefined) {
-      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`, [dormRoomId, room.perMonth]);
+      await conn.execute(
+        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+        [dormRoomId, room.perMonth],
+      );
     }
     if (room.perTerm !== null && room.perTerm !== undefined) {
-      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`, [dormRoomId, room.perTerm]);
+      await conn.execute(
+        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+        [dormRoomId, room.perTerm],
+      );
     }
     // 🌟 เพิ่มราคารายวัน (PRICE_TYPE_ID = 3)
     if (room.perDay !== null && room.perDay !== undefined) {
-      await conn.execute(`INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`, [dormRoomId, room.perDay]);
+      await conn.execute(
+        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+        [dormRoomId, room.perDay],
+      );
     }
 
     // เพิ่มประเภทเตียง
     const bedTypeId = getBedId(room.bedType);
-    await conn.execute(`INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`, [dormRoomId, bedTypeId]);
+    await conn.execute(
+      `INSERT INTO ROOM_BEDS (DORM_ROOM_ID, BED_TYPE_ID) VALUES (?, ?)`,
+      [dormRoomId, bedTypeId],
+    );
   }
 };
 
@@ -1345,8 +1546,8 @@ export const updateGalleryImages_fn = async (
 ) => {
   if (!uploadedUrls["OTHER_IMG"]) return;
 
-  const newUrls = Array.isArray(uploadedUrls["OTHER_IMG"]) 
-    ? uploadedUrls["OTHER_IMG"] 
+  const newUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
+    ? uploadedUrls["OTHER_IMG"]
     : [uploadedUrls["OTHER_IMG"]];
 
   if (newUrls.length === 0) return;
@@ -1381,28 +1582,75 @@ export const updateGalleryImages_fn = async (
 export const removeDorm_api = async (req: Request, res: Response) => {
   const { id } = req.params;
   const conn = await dbcon.getConnection();
+  const userRole = (req as any).user?.role;
 
   try {
-    const [result] = await conn.execute<ResultSetHeader>(
-      "UPDATE DORMITORIES SET DORM_STATUS_ID = 2 WHERE DORM_ID = ?",
-      [id],
-    );
+    if (userRole === 3) {
+      // Admin: Hard Delete
+      await conn.beginTransaction();
 
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
+      // ลบตารางที่มี Foreign Key เชื่อมกับ DORM_ROOMS ก่อน
+      await conn.execute(
+        "DELETE rp FROM ROOM_PRICES rp JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
+        [id]
+      );
+      await conn.execute(
+        "DELETE rb FROM ROOM_BEDS rb JOIN DORM_ROOMS dr ON rb.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
+        [id]
+      );
+
+      // ลบตารางที่เชื่อมกับ DORM_ID
+      await conn.execute("DELETE FROM DORM_ROOMS WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM FACILITIES_DORMS WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM FAVORITES WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM REVIEWS WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM STATISTIC_WEB_VIEW WHERE DORM_ID = ?", [id]);
+      await conn.execute("DELETE FROM WEB_VIEW_LOGS WHERE DORM_ID = ?", [id]);
+
+      // ลบหอพักในตารางหลัก
+      const [result] = await conn.execute<ResultSetHeader>(
+        "DELETE FROM DORMITORIES WHERE DORM_ID = ?",
+        [id],
+      );
+
+      if (result.affectedRows === 0) {
+        await conn.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
+      }
+
+      await conn.commit();
+
+      res.json({
+        success: true,
+        message: "ลบข้อมูลหอพักออกจากระบบอย่างถาวรเรียบร้อยแล้ว (Hard Delete)",
+      });
+    } else {
+      // Dorm Owner: Soft Delete
+      const [result] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORMITORIES SET DORM_STATUS_ID = 2 WHERE DORM_ID = ?",
+        [id],
+      );
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
+      }
+
+      res.json({
+        success: true,
+        message: "สถานะหอพักถูกเปลี่ยนเป็นปิดรับจอง (Soft Delete)",
+      });
     }
-
-    res.json({
-      success: true,
-      message: "สถานะหอพักถูกเปลี่ยนเป็นถูกลบ",
-    });
   } catch (error: any) {
-    console.error("Remove Dorm Error:", error);
+    await conn.rollback();
+    console.error("Hard Delete Dorm Error:", error);
     res.status(500).json({
       success: false,
-      message: "เกิดข้อผิดพลาดในการลบหอพัก",
+      message: "เกิดข้อผิดพลาดในการลบหอพักแบบถาวร",
       error: error.message,
     });
   } finally {
@@ -1445,9 +1693,10 @@ export const restoreDorm_api = async (req: Request, res: Response) => {
 export const addReview_api = async (req: Request, res: Response) => {
   const { user_id, dorm_id, score, comment } = req.body;
   if (!user_id || !dorm_id || score === undefined) {
-    return res
-      .status(400)
-      .json({ success: false, message: `ข้อมูลไม่ครบถ้วน${user_id}, ${dorm_id}, ${score}, ${comment}` });
+    return res.status(400).json({
+      success: false,
+      message: `ข้อมูลไม่ครบถ้วน${user_id}, ${dorm_id}, ${score}, ${comment}`,
+    });
   }
 
   const conn = await dbcon.getConnection();
@@ -1589,13 +1838,11 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("เกิดข้อผิดพลาดในการดึงข้อมูลหอพัก:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพัก",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพัก",
+      error: error.message,
+    });
   }
 };
 
@@ -1626,13 +1873,11 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Get Reviews Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลรีวิว",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลรีวิว",
+      error: error.message,
+    });
   }
 };
 
@@ -1661,13 +1906,11 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Get Pending Owners Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลเจ้าของหอพักที่รอการอนุมัติ",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลเจ้าของหอพักที่รอการอนุมัติ",
+      error: error.message,
+    });
   }
 };
 
@@ -1706,13 +1949,11 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Get Popular Dorms Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักยอดนิยม",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลหอพักยอดนิยม",
+      error: error.message,
+    });
   }
 };
 
@@ -1796,7 +2037,9 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
         d.ADDRESS,
         d.FRONT_DORM_IMAGE,
         d.REG_AT,           
-        d.DORM_LICENSE,     
+        d.DORM_LICENSE,
+        d.REQ_STATUS,
+        d.DORM_STATUS_ID,
         
         dz.ZONE_NAME,
         dt.DORM_TYPE_NAME,
@@ -1813,12 +2056,13 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       
-      WHERE d.REQ_STATUS = 0  
+      WHERE d.REQ_STATUS IN (0, 2)  
       ORDER BY d.REG_AT ASC   
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
     res.json({
+      success: true,
       data: dorms,
     });
   } catch (error: any) {
@@ -1826,13 +2070,11 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       "เกิดข้อผิดพลาดในการดึงข้อมูลคำร้องขอหอพักที่รอการอนุมัติ:",
       error,
     );
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลคำร้องขอหอพักที่รอการอนุมัติ",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลคำร้องขอหอพักที่รอการอนุมัติ",
+      error: error.message,
+    });
   }
 };
 
@@ -1845,10 +2087,15 @@ export const getFacilities_api = async (req: Request, res: Response) => {
     if (facs.length > 0) {
       return res.status(200).json({ success: true, data: facs });
     } else {
-      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลสิ่งอำนวยความสะดวกในระบบ" });
+      return res.status(404).json({
+        success: false,
+        message: "ไม่พบข้อมูลสิ่งอำนวยความสะดวกในระบบ",
+      });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
   } finally {
     conn.release();
   }
@@ -1871,12 +2118,10 @@ export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
       return res.status(404).json("ไม่พบข้อมูลสิ่งอำนวยความสะดวกในระบบ");
     }
   } catch (error: any) {
-    res
-      .status(500)
-      .json({
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลสิ่งอำนวยความสะดวก",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลสิ่งอำนวยความสะดวก",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -1928,12 +2173,10 @@ export const updateFacility_api = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     await deleteFromGCS(iconUrl);
-    res
-      .status(500)
-      .json({
-        message: "เกิดข้อผิดพลาดในการอัปเดตสิ่งอำนวยความสะดวก",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "เกิดข้อผิดพลาดในการอัปเดตสิ่งอำนวยความสะดวก",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -1947,29 +2190,36 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
   try {
     const [result] = await conn.execute<ResultSetHeader>(
       "UPDATE DORMITORIES SET DORM_STATUS_ID = ? WHERE DORM_ID = ?",
-      [status_id, id]
+      [status_id, id],
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลหอพักนี้" });
+      return res
+        .status(404)
+        .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้" });
     }
 
     res.json({ success: true, message: "เปลี่ยนสถานะหอพักเรียบร้อยแล้ว" });
-    } catch (error: any) {
+  } catch (error: any) {
     console.error("Change Status Error:", error);
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ", error: error.message });
-    } finally {
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ",
+      error: error.message,
+    });
+  } finally {
     conn.release();
-    }
-    };
+  }
+};
 
-    export const getAllDormMB = async (req: Request, res: Response) => {
-      try {
-        const { search, zone, minPrice, maxPrice, lat, lng, radius, score } = req.query;
-        const trimmedSearch = search ? search.toString().trim() : "";
-        const userRole = (req as any).user?.role;
+export const getAllDormMB = async (req: Request, res: Response) => {
+  try {
+    const { search, zone, minPrice, maxPrice, lat, lng, radius, score } =
+      req.query;
+    const trimmedSearch = search ? search.toString().trim() : "";
+    const userRole = (req as any).user?.role;
 
-        let sql = `
+    let sql = `
                 SELECT 
                     d.DORM_ID, 
                     d.DORM_NAME, 
@@ -1989,83 +2239,106 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
                 WHERE d.DORM_STATUS_ID in (1, 3)
             `;
 
-        if (userRole === 3) {
-          sql += ` AND d.REQ_STATUS IN (0, 1, 2) `;
-        } else {
-          sql += ` AND d.REQ_STATUS = 1 `;
-        }
+    if (userRole === 3) {
+      sql += ` AND d.REQ_STATUS IN (0, 1, 2) `;
+    } else {
+      sql += ` AND d.REQ_STATUS = 1 `;
+    }
 
-        const params: any[] = [];
+    const params: any[] = [];
 
-        if (trimmedSearch) {
-          sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
-          params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
-        }
+    if (trimmedSearch) {
+      sql += ` AND (d.DORM_NAME LIKE ? OR dz.ZONE_NAME LIKE ?) `;
+      params.push(`%${trimmedSearch}%`, `%${trimmedSearch}%`);
+    }
 
-        if (zone && zone !== "" && zone !== "null" && zone !== "undefined") {
-          const zoneId = Number(zone);
-          if (!isNaN(zoneId)) {
-            sql += ` AND d.ZONE_ID = ? `;
-            params.push(zoneId);
-          }
-        }
-
-        if (score && score !== "" && score !== "null" && score !== "undefined") {
-          const scoreNum = Number(score);
-          if (!isNaN(scoreNum)) {
-            sql += ` AND d.SCORE between ? and (? + 0.9) `;
-            params.push(scoreNum, scoreNum);
-          }
-        }
-
-        if (lat && lng && radius && lat !== "null" && lng !== "null" && radius !== "null") {
-          const latNum = Number(lat);
-          const lngNum = Number(lng);
-          const radiusNum = Number(radius);
-          if (!isNaN(latNum) && !isNaN(lngNum) && !isNaN(radiusNum)) {
-            sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
-            params.push(lngNum, latNum, radiusNum * 1000);
-          }
-        }
-
-        sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
-
-        const havingClauses = [];
-        if (minPrice !== undefined && minPrice !== null && minPrice !== "" && minPrice !== "null" && minPrice !== "undefined") {
-          const minP = Number(minPrice);
-          if (!isNaN(minP)) {
-            havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`);
-            params.push(minP);
-          }
-        }
-        if (maxPrice !== undefined && maxPrice !== null && maxPrice !== "" && maxPrice !== "null" && maxPrice !== "undefined") {
-          const maxP = Number(maxPrice);
-          if (!isNaN(maxP)) {
-            havingClauses.push(`COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`);
-            params.push(maxP);
-          }
-        }
-
-        if (havingClauses.length > 0) {
-          sql += ` HAVING ` + havingClauses.join(" AND ");
-        }
-
-        sql += ` ORDER BY d.UPDATE_AT DESC `;
-
-        const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
-        res.json({ success: true, data: dorms });
-      } catch (error) {
-        console.error("Error in getAllDormMB:", error);
-        res
-          .status(500)
-          .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+    if (zone && zone !== "" && zone !== "null" && zone !== "undefined") {
+      const zoneId = Number(zone);
+      if (!isNaN(zoneId)) {
+        sql += ` AND d.ZONE_ID = ? `;
+        params.push(zoneId);
       }
-    };
+    }
+
+    if (score && score !== "" && score !== "null" && score !== "undefined") {
+      const scoreNum = Number(score);
+      if (!isNaN(scoreNum)) {
+        sql += ` AND d.SCORE between ? and (? + 0.9) `;
+        params.push(scoreNum, scoreNum);
+      }
+    }
+
+    if (
+      lat &&
+      lng &&
+      radius &&
+      lat !== "null" &&
+      lng !== "null" &&
+      radius !== "null"
+    ) {
+      const latNum = Number(lat);
+      const lngNum = Number(lng);
+      const radiusNum = Number(radius);
+      if (!isNaN(latNum) && !isNaN(lngNum) && !isNaN(radiusNum)) {
+        sql += ` AND ST_Distance_Sphere(POINT(ST_Y(d.COORDINATES), ST_X(d.COORDINATES)), POINT(?, ?)) <= ? `;
+        params.push(lngNum, latNum, radiusNum * 1000);
+      }
+    }
+
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
+
+    const havingClauses = [];
+    if (
+      minPrice !== undefined &&
+      minPrice !== null &&
+      minPrice !== "" &&
+      minPrice !== "null" &&
+      minPrice !== "undefined"
+    ) {
+      const minP = Number(minPrice);
+      if (!isNaN(minP)) {
+        havingClauses.push(
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
+        );
+        params.push(minP);
+      }
+    }
+    if (
+      maxPrice !== undefined &&
+      maxPrice !== null &&
+      maxPrice !== "" &&
+      maxPrice !== "null" &&
+      maxPrice !== "undefined"
+    ) {
+      const maxP = Number(maxPrice);
+      if (!isNaN(maxP)) {
+        havingClauses.push(
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
+        );
+        params.push(maxP);
+      }
+    }
+
+    if (havingClauses.length > 0) {
+      sql += ` HAVING ` + havingClauses.join(" AND ");
+    }
+
+    sql += ` ORDER BY d.UPDATE_AT DESC `;
+
+    const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
+    res.json({ success: true, data: dorms });
+  } catch (error) {
+    console.error("Error in getAllDormMB:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+  }
+};
 
 export const getAllDormTypes = async (req: Request, res: Response) => {
   try {
     const [rows] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID as id, DORM_TYPE_NAME as name FROM DORM_TYPES"
+      "SELECT DORM_TYPE_ID as id, DORM_TYPE_NAME as name FROM DORM_TYPES",
     );
     res.json({ success: true, data: rows });
   } catch (error: any) {
@@ -2076,7 +2349,7 @@ export const getAllDormTypes = async (req: Request, res: Response) => {
 export const getAllRoomTypes = async (req: Request, res: Response) => {
   try {
     const [rows] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT ROOM_TYPE_ID as id, ROOM_TYPE_NAME as name FROM ROOM_TYPES"
+      "SELECT ROOM_TYPE_ID as id, ROOM_TYPE_NAME as name FROM ROOM_TYPES",
     );
     res.json({ success: true, data: rows });
   } catch (error: any) {
@@ -2087,7 +2360,7 @@ export const getAllRoomTypes = async (req: Request, res: Response) => {
 export const getAllBedTypes = async (req: Request, res: Response) => {
   try {
     const [rows] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT BED_TYPE_ID as id, BED_TYPE_NAME as name FROM BED_TYPES"
+      "SELECT BED_TYPE_ID as id, BED_TYPE_NAME as name FROM BED_TYPES",
     );
     res.json({ success: true, data: rows });
   } catch (error: any) {
@@ -2101,41 +2374,69 @@ export const getFacilityRequests_api = async (req: Request, res: Response) => {
     const [facs] = await conn.query<RowDataPacket[]>(sql);
     return res.status(200).json({ success: true, data: facs });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
   } finally {
     conn.release();
   }
 };
 
-export const approveFacilityRequest_api = async (req: Request, res: Response) => {
+export const approveFacilityRequest_api = async (
+  req: Request,
+  res: Response,
+) => {
   const conn = await dbcon.getConnection();
   const { fac_id } = req.params;
   try {
     await conn.beginTransaction();
-    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 2 WHERE FAC_TYPE_ID = ?`, [fac_id]);
-    await conn.execute(`UPDATE FACILITIES_DORMS SET STATUS = 1 WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(
+      `UPDATE FACILITIES_TYPES SET STATUS = 2 WHERE FAC_TYPE_ID = ?`,
+      [fac_id],
+    );
+    await conn.execute(
+      `UPDATE FACILITIES_DORMS SET STATUS = 1 WHERE FAC_TYPE_ID = ?`,
+      [fac_id],
+    );
     await conn.commit();
     return res.status(200).json({ success: true, message: "อนุมัติสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการอนุมัติ", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการอนุมัติ",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
 };
 
-export const rejectFacilityRequest_api = async (req: Request, res: Response) => {
+export const rejectFacilityRequest_api = async (
+  req: Request,
+  res: Response,
+) => {
   const conn = await dbcon.getConnection();
   const { fac_id } = req.params;
   try {
     await conn.beginTransaction();
-    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [fac_id]);
-    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
     await conn.commit();
-    return res.status(200).json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
+    return res
+      .status(200)
+      .json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการปฏิเสธคำร้องขอ", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการปฏิเสธคำร้องขอ",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }
@@ -2146,13 +2447,23 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
   const { fac_id } = req.params;
   try {
     await conn.beginTransaction();
-    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [fac_id]);
-    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [fac_id]);
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
     await conn.commit();
-    return res.status(200).json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
+    return res
+      .status(200)
+      .json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลบ", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการลบ",
+      error: error.message,
+    });
   } finally {
     conn.release();
   }

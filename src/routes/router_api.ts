@@ -79,6 +79,7 @@ router.get('/api/dorms/bedTypes', dormController.getAllBedTypes);
 router.get('/api/dorms', dormController.getAllDorms);    
 router.get('/api/dorms/mobile', verifyTokenOptional, dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    
+router.get('/api/dorms/admin/mobile', verifyToken, dormController.getAllDorms_Admin_Mobile);
 router.get('/api/dorms/popular', dormController.getPopularDorms_api);//pass        
 router.post('/api/dorms', verifyToken, imgTypeUploads, dormController.createDorm_api);//pass
 router.post('/api/dorms/mobile', verifyToken, dormController.createDormMB_api);
