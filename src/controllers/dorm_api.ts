@@ -2516,6 +2516,12 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   const fac_id = req.params.fac_id as string;
   try {
+    // ดึงข้อมูลรูปภาพก่อนจะลบ
+    const [facRows] = await conn.execute<RowDataPacket[]>(
+      `SELECT FAC_TYPE_ICON FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`,
+      [fac_id]
+    );
+
     await conn.beginTransaction();
     await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
       fac_id,
@@ -2524,6 +2530,11 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
       fac_id,
     ]);
     await conn.commit();
+
+    // ลบรูปออกจาก Storage หลังจากลบในฐานข้อมูลเสร็จแล้ว
+    if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON) {
+      await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
+    }
     return res
       .status(200)
       .json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
