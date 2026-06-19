@@ -68,7 +68,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
             LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-            WHERE 1=1
+            WHERE d.REQ_STATUS = 1
         `;
 
     const queryParams: any[] = [];
@@ -566,6 +566,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 
   let facilitiesArr: number[] = [];
   let roomTypesArr: any[] = [];
+  let newFacArr: {name: string, icon: string}[] = [];
   try {
     facilitiesArr =
       typeof facilities === "string"
@@ -575,6 +576,13 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       typeof roomTypes === "string"
         ? JSON.parse(roomTypes || "[]")
         : roomTypes || [];
+    
+    const { new_facilities } = req.body;
+    if (new_facilities) {
+      newFacArr = typeof new_facilities === "string" 
+        ? JSON.parse(new_facilities) 
+        : new_facilities;
+    }
   } catch (e) {
     return res.status(400).json({
       success: false,
@@ -671,17 +679,19 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       }
     }
 
-    const { new_fac_name } = req.body;
-    if (new_fac_name) {
-      const [facResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, STATUS, ADD_BY) VALUES (?, 1, ?)`,
-        [new_fac_name, finalUserId],
-      );
-      const newFacId = facResult.insertId;
-      await conn.execute(
-        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-        [dormId, newFacId],
-      );
+    if (newFacArr.length > 0) {
+      for (const fac of newFacArr) {
+        if (!fac.name) continue;
+        const [facResult] = await conn.execute<ResultSetHeader>(
+          `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
+          [fac.name.trim(), fac.icon || null, finalUserId]
+        );
+        const newFacId = facResult.insertId;
+        await conn.execute(
+          `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
+          [dormId, newFacId]
+        );
+      }
     }
 
     const getBedId = async (name: string): Promise<number> => {
@@ -933,9 +943,16 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
   let facilitiesArr: number[] = [];
   let roomTypesArr: any[] = [];
+  let newFacArr: {name: string, icon: string}[] = [];
   try {
     facilitiesArr = JSON.parse(facilities || "[]");
     roomTypesArr = JSON.parse(roomTypes || "[]");
+    const { new_facilities } = req.body;
+    if (new_facilities) {
+      newFacArr = typeof new_facilities === "string" 
+        ? JSON.parse(new_facilities) 
+        : new_facilities;
+    }
   } catch (e) {
     return res.status(400).json({
       success: false,
@@ -1061,18 +1078,19 @@ export const createDorm_api = async (req: Request, res: Response) => {
     }
 
     // 4.5 Handle Custom Facility Request (Monolithic)
-    const { new_fac_name } = req.body;
-    const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
-    if (new_fac_name) {
-      const [facResult] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
-        [new_fac_name, facIconUrl || null, user_id],
-      );
-      const newFacId = facResult.insertId;
-      await conn.execute(
-        `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
-        [dormId, newFacId],
-      );
+    if (newFacArr.length > 0) {
+      for (const fac of newFacArr) {
+        if (!fac.name) continue;
+        const [facResult] = await conn.execute<ResultSetHeader>(
+          `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
+          [fac.name.trim(), fac.icon || null, user_id]
+        );
+        const newFacId = facResult.insertId;
+        await conn.execute(
+          `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
+          [dormId, newFacId]
+        );
+      }
     }
 
     if (uploadedUrls["OTHER_IMG"]) {
