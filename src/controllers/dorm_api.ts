@@ -920,10 +920,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
     // 4.5 Handle Custom Facility Request (Monolithic)
     const { new_fac_name } = req.body;
     const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
-    if (new_fac_name && facIconUrl) {
+    if (new_fac_name) {
       const [facResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
-        [new_fac_name, facIconUrl, user_id]
+        [new_fac_name, facIconUrl || null, user_id]
       );
       const newFacId = facResult.insertId;
       await conn.execute(
