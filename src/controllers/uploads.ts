@@ -81,7 +81,7 @@ export async function processAndUploadImages(
           .resize({ width: 1200, withoutEnlargement: true }) // Max width 1200px
           .webp({ quality: 80 }) // Convert to WebP, 80% quality
           .pipe(blobStream)
-          .on("error", (err) => {
+          .on("error", (err: any) => {
              console.error(`Sharp Processing Error for ${file.originalname}:`, err);
              reject(err);
           });
@@ -158,7 +158,7 @@ export async function fileUpload(
         contentType: "image/webp", 
       });
   
-      blobStream.on("error", (err) => {
+      blobStream.on("error", (err: any) => {
         rejects(err);
       });
   
@@ -174,7 +174,7 @@ export async function fileUpload(
           .resize({ width: 1200, withoutEnlargement: true }) 
           .webp({ quality: 80 }) 
           .pipe(blobStream)
-          .on("error", (err) => {
+          .on("error", (err: any) => {
              rejects(err);
           });
     });
