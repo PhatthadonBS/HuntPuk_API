@@ -539,6 +539,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
 
 export const createDormMB_api = async (req: Request, res: Response) => {
   const tokenUserId = (req as any).user?.id;
+  const tokenUserRole = (req as any).user?.role;
   const {
     user_id, // Still accept it but prioritize tokenUserId
     name,
@@ -555,7 +556,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     roomTypes,
   } = req.body;
 
-  const finalUserId = tokenUserId || user_id;
+  let finalUserId = tokenUserId || user_id;
+  if ((tokenUserRole === 1 || tokenUserRole === 3) && user_id) {
+    finalUserId = user_id;
+  }
 
   if (!finalUserId || !name || !address || !lat || !lng) {
     return res.status(400).json({
@@ -1308,6 +1312,29 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     let uploadedUrls: Record<string, string | string[]> = {};
     if (Object.keys(files).length > 0) {
       uploadedUrls = await processAndUploadImages(files, dormId, ownerId);
+    }
+
+    if (((req as any).user?.role === 1 || (req as any).user?.role === 3) && body.user_id) {
+      const [oRows] = await conn.execute<RowDataPacket[]>(
+        `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ? ORDER BY REQ_STATUS ASC LIMIT 1`,
+        [body.user_id]
+      );
+      let newDormOwnerId;
+      if (oRows.length > 0) {
+        newDormOwnerId = oRows[0]!.DORM_OWNER_ID;
+      } else {
+        const [uRows] = await conn.execute<RowDataPacket[]>(`SELECT USERNAME FROM USERS WHERE USER_ID = ?`, [body.user_id]);
+        if (uRows.length > 0) {
+          const [ins] = await conn.execute<ResultSetHeader>(
+            `INSERT INTO DORM_OWNERS (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE) VALUES (?, ?, ?, 0, '')`,
+            [body.user_id, uRows[0]!.USERNAME, '(Assigned)']
+          );
+          newDormOwnerId = ins.insertId;
+        }
+      }
+      if (newDormOwnerId) {
+        await conn.execute(`UPDATE DORMITORIES SET DORM_OWNER_ID = ? WHERE DORM_ID = ?`, [newDormOwnerId, dormId]);
+      }
     }
 
     await updateDormInfo_fn(dormId, body, uploadedUrls, conn);
