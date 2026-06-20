@@ -2428,6 +2428,54 @@ export const getAllBedTypes = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+export const addDormType = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO DORM_TYPES (DORM_TYPE_NAME) VALUES (?)",
+      [name]
+    );
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteDormType = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM DORM_TYPES WHERE DORM_TYPE_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const addRoomType = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)",
+      [name]
+    );
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteRoomType = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM ROOM_TYPES WHERE ROOM_TYPE_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 export const getFacilityRequests_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {

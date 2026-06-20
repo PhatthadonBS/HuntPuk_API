@@ -83,7 +83,11 @@ router.delete('/api/other/delFavorite', verifyToken, userController.removeFavori
 router.get('/api/dorms/pendingReq', verifyToken, dormController.getPendingDormReq_api);//pass
 router.get('/api/dorms/zones', dormController.getAllZones); 
 router.get('/api/dorms/dormTypes', dormController.getAllDormTypes);
+router.post('/api/dorms/dormTypes', dormController.addDormType);
+router.delete('/api/dorms/dormTypes/:id', dormController.deleteDormType);
 router.get('/api/dorms/roomTypes', dormController.getAllRoomTypes);
+router.post('/api/dorms/roomTypes', dormController.addRoomType);
+router.delete('/api/dorms/roomTypes/:id', dormController.deleteRoomType);
 router.get('/api/dorms/bedTypes', dormController.getAllBedTypes);
 router.get('/api/dorms', dormController.getAllDorms);    
 router.get('/api/dorms/mobile', verifyTokenOptional, dormController.getAllDormMB);
