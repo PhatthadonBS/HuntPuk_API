@@ -294,6 +294,7 @@ export const getDormById = async (req: Request, res: Response) => {
         ST_X(d.COORDINATES) AS LAT,
         ST_Y(d.COORDINATES) AS LNG,
         dz.ZONE_NAME,
+        do.USER_ID,
         do.FIRST_NAME, 
         do.LAST_NAME, 
         u.PHONE_NUMBER AS OWNER_PHONE, 
