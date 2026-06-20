@@ -429,6 +429,7 @@ export const getDormById = async (req: Request, res: Response) => {
       FIRST_NAME: mainData.FIRST_NAME || "(ไม่ระบุชื่อ)",
       LAST_NAME: mainData.LAST_NAME || "",
       USER_ID: mainData.USER_ID,
+      DORM_LICENSE: mainData.DORM_LICENSE,
     };
 
     res.json({ success: true, data: responseData });
@@ -2031,7 +2032,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
     await conn.beginTransaction();
 
     const [dormInfo] = await conn.execute<RowDataPacket[]>(
-      `SELECT u.EMAIL, d.DORM_NAME 
+      `SELECT u.EMAIL, d.DORM_NAME, d.DORM_LICENSE 
        FROM DORMITORIES d
        JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
        JOIN USERS u ON do.USER_ID = u.USER_ID
@@ -2047,10 +2048,21 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
     const targetEmail = dormInfo[0]!.EMAIL;
     const dormName = dormInfo[0]!.DORM_NAME;
 
-    const [result] = await conn.execute<ResultSetHeader>(
-      "UPDATE DORMITORIES SET REQ_STATUS = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
-      [data.status, data.dormId],
-    );
+    let result;
+    if (approve_status) {
+      if (dormInfo[0]!.DORM_LICENSE) {
+        await deleteFromGCS(dormInfo[0]!.DORM_LICENSE);
+      }
+      [result] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORMITORIES SET REQ_STATUS = ?, DORM_LICENSE = '', UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
+        [data.status, data.dormId],
+      );
+    } else {
+      [result] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORMITORIES SET REQ_STATUS = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
+        [data.status, data.dormId],
+      );
+    }
 
     await conn.commit();
 
