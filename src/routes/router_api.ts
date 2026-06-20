@@ -4,6 +4,7 @@ import multer from "multer";
 import * as userController from '../controllers/user_api';
 import * as dormController from '../controllers/dorm_api';
 import * as viewController from '../controllers/view_api';
+import * as dashboardController from '../controllers/dashboard_api';
 import * as testApi from '../controllers/testApi'
 import rateLimit from "express-rate-limit";
 import { verifyToken, verifyTokenOptional } from "../middlewares/auth_middleware";
@@ -20,6 +21,9 @@ router.get('/api', (_req, res) => {
 // View Statistics Routes
 router.post('/api/views/website', viewController.recordWebsiteView);
 router.post('/api/views/dorm/:id', viewController.recordDormView);
+
+// Dashboard Routes
+router.get('/api/dashboard/stats', dashboardController.getDashboardStats_api);
 
 
 const strictLimiter = rateLimit({

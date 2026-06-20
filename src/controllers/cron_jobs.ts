@@ -16,13 +16,12 @@ export function startMonthlyViewSummaryJob() {
 
       await conn.beginTransaction();
 
-      // 2. Summarize dorm views from the previous month
-      // Note: We only summarize dorm views (DORM_ID IS NOT NULL) because STATISTIC_WEB_VIEW requires DORM_ID
+      // 2. Summarize both general website views (NULL) and dorm views from the previous month
       await conn.execute(
         `INSERT INTO STATISTIC_WEB_VIEW (YEAR, MONTH, DORM_ID, VIEW_COUNT)
          SELECT YEAR(VIEW_AT), MONTH(VIEW_AT), DORM_ID, COUNT(*) 
          FROM WEB_VIEW_LOGS 
-         WHERE MONTH(VIEW_AT) = ? AND YEAR(VIEW_AT) = ? AND DORM_ID IS NOT NULL
+         WHERE MONTH(VIEW_AT) = ? AND YEAR(VIEW_AT) = ?
          GROUP BY DORM_ID, YEAR(VIEW_AT), MONTH(VIEW_AT)
          ON DUPLICATE KEY UPDATE VIEW_COUNT = VIEW_COUNT + VALUES(VIEW_COUNT)`,
         [targetMonth, targetYear],
