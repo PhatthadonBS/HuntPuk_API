@@ -111,6 +111,7 @@ router.delete('/api/spec/dorm/:id', verifyToken, dormController.removeDorm_api)/
 router.put('/api/spec/restoreDorm/:id', verifyToken, dormController.restoreDorm_api)//pass
 router.put('/api/spec/user/:id', verifyToken, upload.single('file'), userController.updateUser_api)//pass
 router.delete('/api/spec/delAccount/:id', verifyToken, userController.deleteAccount_api)//pass
+router.delete('/api/admin/users/hardDelete/:id', verifyToken, userController.hardDeleteAccount_api);
 router.put('/api/spec/banAccount/:id', verifyToken, userController.banAccount_api)//pass
 router.put('/api/spec/unbanAccount/:id', verifyToken, userController.unbanAccount_api)//pass
 router.put('/api/spec/dorm/:id', verifyToken, imgTypeUploads, dormController.updateDorm_api)//pass
