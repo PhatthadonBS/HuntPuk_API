@@ -616,7 +616,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     } else {
       const [userRows] = await conn.execute<RowDataPacket[]>(
         `SELECT USERNAME, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?`,
-        [user_id],
+        [finalUserId],
       );
 
       if (userRows.length === 0) {
@@ -634,7 +634,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
         `INSERT INTO DORM_OWNERS 
            (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE)
          VALUES (?, ?, ?, 0, '')`,
-        [user_id, firstName, lastName],
+        [finalUserId, firstName, lastName],
       );
       dorm_owner_id = insertOwner.insertId;
     }
