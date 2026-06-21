@@ -962,16 +962,21 @@ export async function requestDormOwner_fn(
 }
 
 export function normalizeLineID(lineId: string | null): string | null {
-  return lineId ? `https://line.me/ti/p/~${lineId.trim()}` : null;
+  if (!lineId) return null;
+  const trimmed = lineId.trim();
+  if (trimmed.includes('line.me') || trimmed.startsWith('http')) return trimmed;
+  return `https://line.me/ti/p/~${trimmed}`;
 }
 
 export function normalizeThaiPhone(input: string | null): string | null {
   if (!input) return null;
-  let phone = input.replace(/[^\d+]/g, "");
-  if (phone.startsWith("+66")) return phone;
-  if (phone.startsWith("66")) return "+" + phone;
-  if (phone.startsWith("0")) return "https://t.me/+66" + phone.slice(1);
-  return null;
+  const trimmed = input.trim();
+  if (trimmed.includes('t.me') || trimmed.startsWith('http')) return trimmed;
+  let phone = trimmed.replace(/[^\d+]/g, "");
+  if (phone.startsWith("+66")) return `https://t.me/${phone}`;
+  if (phone.startsWith("66")) return `https://t.me/+${phone}`;
+  if (phone.startsWith("0")) return `https://t.me/+66${phone.slice(1)}`;
+  return `https://t.me/${phone}`;
 }
 
 export async function getUser(email: string) {
