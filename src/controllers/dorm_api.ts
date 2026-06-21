@@ -2476,6 +2476,116 @@ export const deleteRoomType = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+export const addBedType = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>("INSERT INTO BED_TYPES (BED_TYPE_NAME) VALUES (?)", [name]);
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteBedType = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM BED_TYPES WHERE BED_TYPE_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const getAllPriceTypes = async (req: Request, res: Response) => {
+  try {
+    const [rows] = await dbcon.execute<RowDataPacket[]>("SELECT PRICE_TYPE_ID as id, PRICE_TYPE_NAME as name FROM PRICE_TYPES");
+    res.json({ success: true, data: rows });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const addPriceType = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>("INSERT INTO PRICE_TYPES (PRICE_TYPE_NAME) VALUES (?)", [name]);
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deletePriceType = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM PRICE_TYPES WHERE PRICE_TYPE_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const getAllDormStatuses = async (req: Request, res: Response) => {
+  try {
+    const [rows] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID as id, DORM_STATUS_NAME as name FROM DORM_STATUSES");
+    res.json({ success: true, data: rows });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const addDormStatus = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>("INSERT INTO DORM_STATUSES (DORM_STATUS_NAME) VALUES (?)", [name]);
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteDormStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM DORM_STATUSES WHERE DORM_STATUS_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const addDormZone = async (req: Request, res: Response) => {
+  try {
+    const { name, lat, lng } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Zone name is required" });
+    
+    // Default coordinates if not provided (Bangkok defaults)
+    const latitude = lat !== undefined && lat !== null && lat !== '' ? Number(lat) : 13.7563;
+    const longitude = lng !== undefined && lng !== null && lng !== '' ? Number(lng) : 100.5018;
+
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES) VALUES (?, ST_GeomFromText(?))", 
+      [name, `POINT(${latitude} ${longitude})`]
+    );
+    res.json({ success: true, message: "Added successfully", id: result.insertId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteDormZone = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await dbcon.execute("DELETE FROM DORM_ZONES WHERE ZONE_ID = ?", [id]);
+    res.json({ success: true, message: "Deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 export const getFacilityRequests_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {

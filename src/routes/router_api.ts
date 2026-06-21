@@ -78,6 +78,8 @@ router.delete('/api/other/delFavorite', verifyToken, userController.removeFavori
 // ✅ Dormitory group
 router.get('/api/dorms/pendingReq', verifyToken, dormController.getPendingDormReq_api);//pass
 router.get('/api/dorms/zones', dormController.getAllZones); 
+router.post('/api/dorms/zones', dormController.addDormZone);
+router.delete('/api/dorms/zones/:id', dormController.deleteDormZone);
 router.get('/api/dorms/dormTypes', dormController.getAllDormTypes);
 router.post('/api/dorms/dormTypes', dormController.addDormType);
 router.delete('/api/dorms/dormTypes/:id', dormController.deleteDormType);
@@ -85,6 +87,14 @@ router.get('/api/dorms/roomTypes', dormController.getAllRoomTypes);
 router.post('/api/dorms/roomTypes', dormController.addRoomType);
 router.delete('/api/dorms/roomTypes/:id', dormController.deleteRoomType);
 router.get('/api/dorms/bedTypes', dormController.getAllBedTypes);
+router.post('/api/dorms/bedTypes', dormController.addBedType);
+router.delete('/api/dorms/bedTypes/:id', dormController.deleteBedType);
+router.get('/api/dorms/priceTypes', dormController.getAllPriceTypes);
+router.post('/api/dorms/priceTypes', dormController.addPriceType);
+router.delete('/api/dorms/priceTypes/:id', dormController.deletePriceType);
+router.get('/api/dorms/dormStatuses', dormController.getAllDormStatuses);
+router.post('/api/dorms/dormStatuses', dormController.addDormStatus);
+router.delete('/api/dorms/dormStatuses/:id', dormController.deleteDormStatus);
 router.get('/api/dorms', dormController.getAllDorms);    
 router.get('/api/dorms/mobile', verifyTokenOptional, dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    
