@@ -1377,9 +1377,13 @@ export const updateDormInfo_fn = async (
   let sql = "UPDATE DORMITORIES SET UPDATE_AT = CURRENT_DATE()";
   const params: any[] = [];
   const [oldData] = await conn.execute<RowDataPacket[]>(
-    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?",
+    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE, REQ_STATUS FROM DORMITORIES WHERE DORM_ID = ?",
     [dormId],
   );
+
+  if (oldData[0]?.REQ_STATUS === 2) {
+    sql += ", REQ_STATUS = 3";
+  }
 
   if (data.name !== undefined && data.name !== "") {
     sql += ", DORM_NAME = ?";
@@ -1719,7 +1723,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
     } else {
       // Dorm Owner: Soft Delete
       const [result] = await conn.execute<ResultSetHeader>(
-        "UPDATE DORMITORIES SET DORM_STATUS_ID = 2 WHERE DORM_ID = ?",
+        "UPDATE DORMITORIES SET DORM_STATUS_ID = 4 WHERE DORM_ID = ?",
         [id],
       );
 
@@ -1913,7 +1917,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-                WHERE do.USER_ID = ?
+                WHERE do.USER_ID = ? AND d.DORM_STATUS_ID != 4
                 GROUP BY d.DORM_ID
                 ORDER BY d.DORM_ID DESC
     `;
@@ -2156,7 +2160,7 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       
-      WHERE d.REQ_STATUS IN (0, 2)  
+      WHERE d.REQ_STATUS IN (0, 2, 3)  
       ORDER BY d.REG_AT ASC   
     `;
 
