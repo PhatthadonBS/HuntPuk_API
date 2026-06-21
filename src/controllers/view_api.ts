@@ -46,7 +46,6 @@ export const recordWebsiteView = async (req: Request, res: Response) => {
 export const recordDormView = async (req: Request, res: Response) => {
   const clientId = getClientId(req);
   const dormId = req.params.id;
-  console.log(dormId, clientId);
 
   try {
     // Check if the same IP/Device viewed this specific dorm in the last 10 minutes

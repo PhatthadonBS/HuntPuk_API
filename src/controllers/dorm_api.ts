@@ -294,6 +294,7 @@ export const getDormById = async (req: Request, res: Response) => {
         ST_X(d.COORDINATES) AS LAT,
         ST_Y(d.COORDINATES) AS LNG,
         dz.ZONE_NAME,
+        do.USER_ID,
         do.FIRST_NAME, 
         do.LAST_NAME, 
         u.PHONE_NUMBER AS OWNER_PHONE, 
@@ -429,6 +430,7 @@ export const getDormById = async (req: Request, res: Response) => {
       FIRST_NAME: mainData.FIRST_NAME || "(ไม่ระบุชื่อ)",
       LAST_NAME: mainData.LAST_NAME || "",
       USER_ID: mainData.USER_ID,
+      DORM_LICENSE: mainData.DORM_LICENSE,
     };
 
     res.json({ success: true, data: responseData });
@@ -538,6 +540,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
 
 export const createDormMB_api = async (req: Request, res: Response) => {
   const tokenUserId = (req as any).user?.id;
+  const tokenUserRole = (req as any).user?.role;
   const {
     user_id, // Still accept it but prioritize tokenUserId
     name,
@@ -554,7 +557,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     roomTypes,
   } = req.body;
 
-  const finalUserId = tokenUserId || user_id;
+  let finalUserId = tokenUserId || user_id;
+  if ((tokenUserRole === 1 || tokenUserRole === 3) && user_id) {
+    finalUserId = user_id;
+  }
 
   if (!finalUserId || !name || !address || !lat || !lng) {
     return res.status(400).json({
@@ -610,7 +616,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
     } else {
       const [userRows] = await conn.execute<RowDataPacket[]>(
         `SELECT USERNAME, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?`,
-        [user_id],
+        [finalUserId],
       );
 
       if (userRows.length === 0) {
@@ -628,7 +634,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
         `INSERT INTO DORM_OWNERS 
            (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE)
          VALUES (?, ?, ?, 0, '')`,
-        [user_id, firstName, lastName],
+        [finalUserId, firstName, lastName],
       );
       dorm_owner_id = insertOwner.insertId;
     }
@@ -1309,6 +1315,29 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       uploadedUrls = await processAndUploadImages(files, dormId, ownerId);
     }
 
+    if (((req as any).user?.role === 1 || (req as any).user?.role === 3) && body.user_id) {
+      const [oRows] = await conn.execute<RowDataPacket[]>(
+        `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ? ORDER BY REQ_STATUS ASC LIMIT 1`,
+        [body.user_id]
+      );
+      let newDormOwnerId;
+      if (oRows.length > 0) {
+        newDormOwnerId = oRows[0]!.DORM_OWNER_ID;
+      } else {
+        const [uRows] = await conn.execute<RowDataPacket[]>(`SELECT USERNAME FROM USERS WHERE USER_ID = ?`, [body.user_id]);
+        if (uRows.length > 0) {
+          const [ins] = await conn.execute<ResultSetHeader>(
+            `INSERT INTO DORM_OWNERS (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE) VALUES (?, ?, ?, 0, '')`,
+            [body.user_id, uRows[0]!.USERNAME, '(Assigned)']
+          );
+          newDormOwnerId = ins.insertId;
+        }
+      }
+      if (newDormOwnerId) {
+        await conn.execute(`UPDATE DORMITORIES SET DORM_OWNER_ID = ? WHERE DORM_ID = ?`, [newDormOwnerId, dormId]);
+      }
+    }
+
     await updateDormInfo_fn(dormId, body, uploadedUrls, conn);
 
     if (body.facilities) {
@@ -1348,9 +1377,13 @@ export const updateDormInfo_fn = async (
   let sql = "UPDATE DORMITORIES SET UPDATE_AT = CURRENT_DATE()";
   const params: any[] = [];
   const [oldData] = await conn.execute<RowDataPacket[]>(
-    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE FROM DORMITORIES WHERE DORM_ID = ?",
+    "SELECT FRONT_DORM_IMAGE, DORM_LICENSE, REQ_STATUS FROM DORMITORIES WHERE DORM_ID = ?",
     [dormId],
   );
+
+  if (oldData[0]?.REQ_STATUS === 2) {
+    sql += ", REQ_STATUS = 3";
+  }
 
   if (data.name !== undefined && data.name !== "") {
     sql += ", DORM_NAME = ?";
@@ -1690,7 +1723,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
     } else {
       // Dorm Owner: Soft Delete
       const [result] = await conn.execute<ResultSetHeader>(
-        "UPDATE DORMITORIES SET DORM_STATUS_ID = 2 WHERE DORM_ID = ?",
+        "UPDATE DORMITORIES SET DORM_STATUS_ID = 4 WHERE DORM_ID = ?",
         [id],
       );
 
@@ -1884,7 +1917,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-                WHERE do.USER_ID = ?
+                WHERE do.USER_ID = ? AND d.DORM_STATUS_ID != 4
                 GROUP BY d.DORM_ID
                 ORDER BY d.DORM_ID DESC
     `;
@@ -2031,7 +2064,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
     await conn.beginTransaction();
 
     const [dormInfo] = await conn.execute<RowDataPacket[]>(
-      `SELECT u.EMAIL, d.DORM_NAME 
+      `SELECT u.EMAIL, d.DORM_NAME, d.DORM_LICENSE 
        FROM DORMITORIES d
        JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
        JOIN USERS u ON do.USER_ID = u.USER_ID
@@ -2047,10 +2080,21 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
     const targetEmail = dormInfo[0]!.EMAIL;
     const dormName = dormInfo[0]!.DORM_NAME;
 
-    const [result] = await conn.execute<ResultSetHeader>(
-      "UPDATE DORMITORIES SET REQ_STATUS = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
-      [data.status, data.dormId],
-    );
+    let result;
+    if (approve_status) {
+      if (dormInfo[0]!.DORM_LICENSE) {
+        await deleteFromGCS(dormInfo[0]!.DORM_LICENSE);
+      }
+      [result] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORMITORIES SET REQ_STATUS = ?, DORM_LICENSE = '', UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
+        [data.status, data.dormId],
+      );
+    } else {
+      [result] = await conn.execute<ResultSetHeader>(
+        "UPDATE DORMITORIES SET REQ_STATUS = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?;",
+        [data.status, data.dormId],
+      );
+    }
 
     await conn.commit();
 
@@ -2116,7 +2160,7 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       
-      WHERE d.REQ_STATUS IN (0, 2)  
+      WHERE d.REQ_STATUS IN (0, 2, 3)  
       ORDER BY d.REG_AT ASC   
     `;
 

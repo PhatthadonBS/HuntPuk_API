@@ -231,7 +231,7 @@ export const login = async (req: Request, res: Response) => {
         status: user[0].ACCOUNT_STATUS,
       }, // Payload
       jwtSecret,
-      { expiresIn: "2h" }, // หมดอายุใน 2 ชั่วโมง
+      { expiresIn: "30d" },
     );
 
     res.json({
@@ -411,22 +411,25 @@ export const updateUser_api = async (req: Request, res: Response) => {
     if (first_name !== undefined && last_name !== undefined) {
       const [existingOwner] = await conn.execute<RowDataPacket[]>(
         "SELECT PROFILE_IMAGE FROM DORM_OWNERS WHERE USER_ID = ?",
-        [id]
+        [id],
       );
 
-      let updateOwnerSql = "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ?";
+      let updateOwnerSql =
+        "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ?";
       const ownerParams: any[] = [first_name, last_name];
 
       if (file) {
         if (existingOwner.length > 0 && existingOwner[0]?.PROFILE_IMAGE) {
-           await deleteFromGCS(existingOwner[0].PROFILE_IMAGE).catch(e => console.error("Failed to delete old image", e));
+          await deleteFromGCS(existingOwner[0].PROFILE_IMAGE).catch((e) =>
+            console.error("Failed to delete old image", e),
+          );
         }
         publicUrl = await fileUpload(
           file,
           "users",
           `${username}_${id}`,
           null,
-          "profile"
+          "profile",
         );
         updateOwnerSql += ", PROFILE_IMAGE = ?";
         ownerParams.push(publicUrl);
@@ -441,7 +444,9 @@ export const updateUser_api = async (req: Request, res: Response) => {
     await conn.commit();
 
     if (result.affectedRows > 0 || first_name !== undefined) {
-      return res.status(200).json({ message: "อัปเดตข้อมูลผู้ใช้สำเร็จ", imageUrl: publicUrl });
+      return res
+        .status(200)
+        .json({ message: "อัปเดตข้อมูลผู้ใช้สำเร็จ", imageUrl: publicUrl });
     } else {
       return res
         .status(404)
@@ -449,7 +454,7 @@ export const updateUser_api = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     await conn.rollback();
-    
+
     if (publicUrl) {
       await deleteFromGCS(publicUrl).catch((err) =>
         console.error("Failed to delete image:", err),
@@ -492,6 +497,40 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
   } catch (error) {
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+  }
+};
+
+export const hardDeleteAccount_api = async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  if (Number(id) == 1)
+    return res
+      .status(400)
+      .json({ message: "ไม่สามารถลบบัญชีผู้ดูแลระบบหลักได้" });
+  try {
+    const [result] = await dbcon.execute<ResultSetHeader>(
+      "DELETE FROM USERS WHERE USER_ID = ?",
+      [id],
+    );
+
+    if (result.affectedRows > 0) {
+      return res
+        .status(200)
+        .json({ message: "บัญชีผู้ใช้ถูกลบออกจากระบบอย่างถาวรแล้ว" });
+    } else {
+      return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
+    }
+  } catch (error: any) {
+    if (
+      error.code === "ER_ROW_IS_REFERENCED_2" ||
+      error.code === "ER_ROW_IS_REFERENCED"
+    ) {
+      // If ON DELETE CASCADE is not configured, fallback to manual cascade or report error
+      return res.status(400).json({
+        message: "ไม่สามารถลบได้เนื่องจากมีข้อมูลผูกพัน (เช่น หอพัก/รีวิว)",
+        error,
+      });
+    }
     return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
   }
 };
@@ -962,16 +1001,21 @@ export async function requestDormOwner_fn(
 }
 
 export function normalizeLineID(lineId: string | null): string | null {
-  return lineId ? `https://line.me/ti/p/~${lineId.trim()}` : null;
+  if (!lineId) return null;
+  const trimmed = lineId.trim();
+  if (trimmed.includes("line.me") || trimmed.startsWith("http")) return trimmed;
+  return `https://line.me/ti/p/~${trimmed}`;
 }
 
 export function normalizeThaiPhone(input: string | null): string | null {
   if (!input) return null;
-  let phone = input.replace(/[^\d+]/g, "");
-  if (phone.startsWith("+66")) return phone;
-  if (phone.startsWith("66")) return "+" + phone;
-  if (phone.startsWith("0")) return "https://t.me/+66" + phone.slice(1);
-  return null;
+  const trimmed = input.trim();
+  if (trimmed.includes("t.me") || trimmed.startsWith("http")) return trimmed;
+  let phone = trimmed.replace(/[^\d+]/g, "");
+  if (phone.startsWith("+66")) return `https://t.me/${phone}`;
+  if (phone.startsWith("66")) return `https://t.me/+${phone}`;
+  if (phone.startsWith("0")) return `https://t.me/+66${phone.slice(1)}`;
+  return `https://t.me/${phone}`;
 }
 
 export async function getUser(email: string) {

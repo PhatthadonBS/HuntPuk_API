@@ -4,6 +4,7 @@ import multer from "multer";
 import * as userController from '../controllers/user_api';
 import * as dormController from '../controllers/dorm_api';
 import * as viewController from '../controllers/view_api';
+import * as dashboardController from '../controllers/dashboard_api';
 import * as testApi from '../controllers/testApi'
 import rateLimit from "express-rate-limit";
 import { verifyToken, verifyTokenOptional } from "../middlewares/auth_middleware";
@@ -20,6 +21,9 @@ router.get('/api', (_req, res) => {
 // View Statistics Routes
 router.post('/api/views/website', viewController.recordWebsiteView);
 router.post('/api/views/dorm/:id', viewController.recordDormView);
+
+// Dashboard Routes
+router.get('/api/dashboard/stats', dashboardController.getDashboardStats_api);
 
 
 const strictLimiter = rateLimit({
@@ -117,6 +121,7 @@ router.delete('/api/spec/dorm/:id', verifyToken, dormController.removeDorm_api)/
 router.put('/api/spec/restoreDorm/:id', verifyToken, dormController.restoreDorm_api)//pass
 router.put('/api/spec/user/:id', verifyToken, upload.single('file'), userController.updateUser_api)//pass
 router.delete('/api/spec/delAccount/:id', verifyToken, userController.deleteAccount_api)//pass
+router.delete('/api/admin/users/hardDelete/:id', verifyToken, userController.hardDeleteAccount_api);
 router.put('/api/spec/banAccount/:id', verifyToken, userController.banAccount_api)//pass
 router.put('/api/spec/unbanAccount/:id', verifyToken, userController.unbanAccount_api)//pass
 router.put('/api/spec/dorm/:id', verifyToken, imgTypeUploads, dormController.updateDorm_api)//pass
