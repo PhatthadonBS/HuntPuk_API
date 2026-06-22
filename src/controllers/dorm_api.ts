@@ -216,6 +216,8 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
       
+      WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
+      
       GROUP BY d.DORM_ID
       ORDER BY d.DORM_ID DESC
     `;
@@ -262,7 +264,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
       
-      WHERE d.REQ_STATUS = 1
+      WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
       
       GROUP BY d.DORM_ID
       ORDER BY d.DORM_ID DESC
@@ -2345,7 +2347,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
             `;
 
     if (userRole === 3) {
-      sql += ` AND d.REQ_STATUS IN (1, 2) `;
+      sql += ` AND d.REQ_STATUS IN (1, 2, 3) `;
     } else {
       sql += ` AND d.REQ_STATUS = 1 `;
     }
