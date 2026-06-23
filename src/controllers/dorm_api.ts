@@ -63,7 +63,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.UPDATE_AT,
                 -- ✅ แก้: ดึงเฉพาะราคารายเดือน (PRICE_TYPE_ID = 1) เป็น start_price
                 -- ไม่ใช้ MIN(PRICE) ทั้งหมด เพราะรายวันอาจถูกกว่ารายเดือนทำให้ราคาผิด
-                MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END) as start_price
+                MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -203,7 +203,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.FRONT_DORM_IMAGE, 
         
         dz.ZONE_NAME,
-        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
         do.LAST_NAME,
@@ -253,7 +253,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.REQ_STATUS,
         
         dz.ZONE_NAME,
-        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
         do.LAST_NAME,
@@ -346,9 +346,10 @@ export const getDormById = async (req: Request, res: Response) => {
             dr.DORM_ROOM_ID,
             rt.ROOM_TYPE_ID,
             rt.ROOM_TYPE_NAME, 
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE END) as perMonth,
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 2 THEN rp.PRICE END) as perTerm,
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 3 THEN rp.PRICE END) as perDay,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE END) as perMonth,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เทอม%' LIMIT 1) THEN rp.PRICE END) as perTerm,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%วัน%' LIMIT 1) THEN rp.PRICE END) as perDay,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%ปี%' LIMIT 1) THEN rp.PRICE END) as perYear,
             rb.BED_TYPE_ID,
             bt.BED_TYPE_NAME
         FROM DORM_ROOMS dr
@@ -403,15 +404,18 @@ export const getDormById = async (req: Request, res: Response) => {
     });
 
     const [roomPricesResult] = await dbcon.query<RowDataPacket[]>(
-      `SELECT rp.DORM_ROOM_ID, rp.PRICE_TYPE_ID, rp.PRICE FROM ROOM_PRICES rp
-       JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?`,
+      `SELECT rp.DORM_ROOM_ID, rp.PRICE_TYPE_ID, rp.PRICE, pt.PRICE_TYPE_NAME 
+       FROM ROOM_PRICES rp
+       JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID 
+       JOIN PRICE_TYPES pt ON rp.PRICE_TYPE_ID = pt.PRICE_TYPE_ID
+       WHERE dr.DORM_ID = ?`,
       [id]
     );
 
     const roomPricesMap: Record<number, any[]> = {};
     roomPricesResult.forEach((rp: any) => {
       if (!roomPricesMap[rp.DORM_ROOM_ID]) roomPricesMap[rp.DORM_ROOM_ID] = [];
-      roomPricesMap[rp.DORM_ROOM_ID]!.push({ priceTypeId: rp.PRICE_TYPE_ID, price: rp.PRICE });
+      roomPricesMap[rp.DORM_ROOM_ID]!.push({ priceTypeId: rp.PRICE_TYPE_ID, name: rp.PRICE_TYPE_NAME, price: rp.PRICE });
     });
 
     const responseData: any = {
@@ -769,38 +773,49 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       const dormRoomId = drResult.insertId;
 
-      if (
-        room.perMonth !== null &&
-        room.perMonth !== undefined &&
-        room.perMonth !== "" &&
-        Number(room.perMonth) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-          [dormRoomId, room.perMonth],
-        );
-      }
-      if (
-        room.perTerm !== null &&
-        room.perTerm !== undefined &&
-        room.perTerm !== "" &&
-        Number(room.perTerm) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-          [dormRoomId, room.perTerm],
-        );
-      }
-      if (
-        room.perDay !== null &&
-        room.perDay !== undefined &&
-        room.perDay !== "" &&
-        Number(room.perDay) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-          [dormRoomId, room.perDay],
-        );
+      if (room.prices && Array.isArray(room.prices)) {
+        for (const p of room.prices) {
+          if (p.price !== null && p.price !== undefined && p.price !== "" && Number(p.price) > 0) {
+            await conn.execute(
+              `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+              [dormRoomId, p.priceTypeId, p.price]
+            );
+          }
+        }
+      } else {
+        if (
+          room.perMonth !== null &&
+          room.perMonth !== undefined &&
+          room.perMonth !== "" &&
+          Number(room.perMonth) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+            [dormRoomId, room.perMonth],
+          );
+        }
+        if (
+          room.perTerm !== null &&
+          room.perTerm !== undefined &&
+          room.perTerm !== "" &&
+          Number(room.perTerm) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+            [dormRoomId, room.perTerm],
+          );
+        }
+        if (
+          room.perDay !== null &&
+          room.perDay !== undefined &&
+          room.perDay !== "" &&
+          Number(room.perDay) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+            [dormRoomId, room.perDay],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1229,38 +1244,49 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       const dormRoomId = drResult.insertId;
 
-      if (
-        room.perMonth !== null &&
-        room.perMonth !== undefined &&
-        room.perMonth !== "" &&
-        Number(room.perMonth) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-          [dormRoomId, room.perMonth],
-        );
-      }
-      if (
-        room.perTerm !== null &&
-        room.perTerm !== undefined &&
-        room.perTerm !== "" &&
-        Number(room.perTerm) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-          [dormRoomId, room.perTerm],
-        );
-      }
-      if (
-        room.perDay !== null &&
-        room.perDay !== undefined &&
-        room.perDay !== "" &&
-        Number(room.perDay) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-          [dormRoomId, room.perDay],
-        );
+      if (room.prices && Array.isArray(room.prices)) {
+        for (const p of room.prices) {
+          if (p.price !== null && p.price !== undefined && p.price !== "" && Number(p.price) > 0) {
+            await conn.execute(
+              `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+              [dormRoomId, p.priceTypeId, p.price]
+            );
+          }
+        }
+      } else {
+        if (
+          room.perMonth !== null &&
+          room.perMonth !== undefined &&
+          room.perMonth !== "" &&
+          Number(room.perMonth) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+            [dormRoomId, room.perMonth],
+          );
+        }
+        if (
+          room.perTerm !== null &&
+          room.perTerm !== undefined &&
+          room.perTerm !== "" &&
+          Number(room.perTerm) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+            [dormRoomId, room.perTerm],
+          );
+        }
+        if (
+          room.perDay !== null &&
+          room.perDay !== undefined &&
+          room.perDay !== "" &&
+          Number(room.perDay) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+            [dormRoomId, room.perDay],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1941,7 +1967,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     d.DORM_STATUS_ID, 
                     ds.DORM_STATUS_NAME, 
                     dz.ZONE_NAME,
-                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
                 FROM DORMITORIES d
                 JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
@@ -2052,7 +2078,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.VIEW_COUNT,
                   dz.ZONE_NAME,
                   /* 🌟 แก้ไขจุดที่ 6: หน้า Popular ก็ต้องยึดรายเดือน */
-                  COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                  COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                   d.DORM_STATUS_ID as status,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
@@ -2365,7 +2391,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     dz.ZONE_NAME as zone, 
                     ST_X(d.COORDINATES) as lat, 
                     ST_Y(d.COORDINATES) as lng, 
-                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                     d.DORM_STATUS_ID as status
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
@@ -2434,7 +2460,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const minP = Number(minPrice);
       if (!isNaN(minP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
         );
         params.push(minP);
       }
@@ -2449,7 +2475,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const maxP = Number(maxPrice);
       if (!isNaN(maxP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
         );
         params.push(maxP);
       }
