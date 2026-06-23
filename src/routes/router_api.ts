@@ -99,6 +99,9 @@ router.delete('/api/dorms/priceTypes/:id', dormController.deletePriceType);
 router.get('/api/dorms/dormStatuses', dormController.getAllDormStatuses);
 router.post('/api/dorms/dormStatuses', dormController.addDormStatus);
 router.delete('/api/dorms/dormStatuses/:id', dormController.deleteDormStatus);
+
+// Unified endpoint for editing master types
+router.put('/api/type_management/:type/:id', dormController.updateMasterType);
 router.get('/api/dorms', dormController.getAllDorms);    
 router.get('/api/dorms/mobile', verifyTokenOptional, dormController.getAllDormMB);
 router.get('/api/dorms/admin', verifyToken, dormController.getAllDorms_Admin);//pass    

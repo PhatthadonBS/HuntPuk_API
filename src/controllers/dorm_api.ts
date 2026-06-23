@@ -198,6 +198,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.DORM_ID, 
         d.DORM_NAME, 
         d.DORM_STATUS_ID,
+        ds.DORM_STATUS_NAME,
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         
@@ -212,6 +213,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
       FROM DORMITORIES d
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
@@ -245,6 +247,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.DORM_ID, 
         d.DORM_NAME, 
         d.DORM_STATUS_ID,
+        ds.DORM_STATUS_NAME,
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         d.REQ_STATUS,
@@ -260,6 +263,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
       FROM DORMITORIES d
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
+      LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
@@ -398,6 +402,18 @@ export const getDormById = async (req: Request, res: Response) => {
       }
     });
 
+    const [roomPricesResult] = await dbcon.query<RowDataPacket[]>(
+      `SELECT rp.DORM_ROOM_ID, rp.PRICE_TYPE_ID, rp.PRICE FROM ROOM_PRICES rp
+       JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?`,
+      [id]
+    );
+
+    const roomPricesMap: Record<number, any[]> = {};
+    roomPricesResult.forEach((rp: any) => {
+      if (!roomPricesMap[rp.DORM_ROOM_ID]) roomPricesMap[rp.DORM_ROOM_ID] = [];
+      roomPricesMap[rp.DORM_ROOM_ID]!.push({ priceTypeId: rp.PRICE_TYPE_ID, price: rp.PRICE });
+    });
+
     const responseData: any = {
       ...mainData,
       DORM_NAME: mainData.DORM_NAME,
@@ -418,10 +434,12 @@ export const getDormById = async (req: Request, res: Response) => {
       ...roomComponents,
       rooms: rooms.map((r: any) => ({
         ROOM_TYPE_ID: r.ROOM_TYPE_ID,
+        DORM_ROOM_ID: r.DORM_ROOM_ID,
         ROOM_TYPE_NAME: r.ROOM_TYPE_NAME,
         PRICE: Number(r.perMonth || r.permonth || r.PERMONTH || 0),
         perTerm: Number(r.perTerm || r.perterm || r.PERTERM || 0),
         perDay: Number(r.perDay || r.perday || r.PERDAY || 0),
+        prices: roomPricesMap[r.DORM_ROOM_ID] || [],
         bedType: r.BED_TYPE_NAME || "-",
         BED_TYPE_ID: r.BED_TYPE_ID,
       })),
@@ -1560,24 +1578,35 @@ export const updateRoomTypes_fn = async (
     const dormRoomId = drResult.insertId;
 
     // เพิ่มราคา
-    if (room.perMonth !== null && room.perMonth !== undefined) {
-      await conn.execute(
-        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-        [dormRoomId, room.perMonth],
-      );
-    }
-    if (room.perTerm !== null && room.perTerm !== undefined) {
-      await conn.execute(
-        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-        [dormRoomId, room.perTerm],
-      );
-    }
-    // 🌟 เพิ่มราคารายวัน (PRICE_TYPE_ID = 3)
-    if (room.perDay !== null && room.perDay !== undefined) {
-      await conn.execute(
-        `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-        [dormRoomId, room.perDay],
-      );
+    if (room.prices && Array.isArray(room.prices)) {
+      for (const p of room.prices) {
+        if (p.price !== null && p.price !== undefined && p.price > 0) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+            [dormRoomId, p.priceTypeId, p.price]
+          );
+        }
+      }
+    } else {
+      // Fallback for older apps that still send perMonth, perTerm, perDay
+      if (room.perMonth !== null && room.perMonth !== undefined) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+          [dormRoomId, room.perMonth],
+        );
+      }
+      if (room.perTerm !== null && room.perTerm !== undefined) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+          [dormRoomId, room.perTerm],
+        );
+      }
+      if (room.perDay !== null && room.perDay !== undefined) {
+        await conn.execute(
+          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+          [dormRoomId, room.perDay],
+        );
+      }
     }
 
     // เพิ่มประเภทเตียง
@@ -2742,5 +2771,54 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     });
   } finally {
     conn.release();
+  }
+};
+
+
+export const updateMasterType = async (req: Request, res: Response) => {
+  try {
+    const { type, id } = req.params;
+    const { name, lat, lng } = req.body;
+
+    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+
+    let query = "";
+    let params: any[] = [];
+
+    switch (type) {
+      case 'bed':
+        query = "UPDATE BED_TYPES SET BED_TYPE_NAME = ? WHERE BED_TYPE_ID = ?";
+        params = [name, id];
+        break;
+      case 'dorm':
+        query = "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
+        params = [name, id];
+        break;
+      case 'status':
+        query = "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
+        params = [name, id];
+        break;
+      case 'price':
+        query = "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
+        params = [name, id];
+        break;
+      case 'room':
+        query = "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
+        params = [name, id];
+        break;
+      case 'zone':
+        const latitude = lat !== undefined && lat !== null && lat !== '' ? Number(lat) : 13.7563;
+        const longitude = lng !== undefined && lng !== null && lng !== '' ? Number(lng) : 100.5018;
+        query = "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?) WHERE ZONE_ID = ?";
+        params = [name, `POINT(${latitude} ${longitude})`, id];
+        break;
+      default:
+        return res.status(400).json({ success: false, message: "Invalid type" });
+    }
+
+    await dbcon.execute(query, params);
+    res.json({ success: true, message: "Updated successfully" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
   }
 };
