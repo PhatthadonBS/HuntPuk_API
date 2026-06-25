@@ -349,6 +349,7 @@ export const getDormById = async (req: Request, res: Response) => {
             MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE END) as perMonth,
             MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เทอม%' LIMIT 1) THEN rp.PRICE END) as perTerm,
             MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%วัน%' LIMIT 1) THEN rp.PRICE END) as perDay,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%ปี%' LIMIT 1) THEN rp.PRICE END) as perYear,
             rb.BED_TYPE_ID,
             bt.BED_TYPE_NAME
         FROM DORM_ROOMS dr
@@ -403,15 +404,22 @@ export const getDormById = async (req: Request, res: Response) => {
     });
 
     const [roomPricesResult] = await dbcon.query<RowDataPacket[]>(
-      `SELECT rp.DORM_ROOM_ID, rp.PRICE_TYPE_ID, rp.PRICE FROM ROOM_PRICES rp
-       JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?`,
-      [id]
+      `SELECT rp.DORM_ROOM_ID, rp.PRICE_TYPE_ID, rp.PRICE, pt.PRICE_TYPE_NAME 
+       FROM ROOM_PRICES rp
+       JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID 
+       JOIN PRICE_TYPES pt ON rp.PRICE_TYPE_ID = pt.PRICE_TYPE_ID
+       WHERE dr.DORM_ID = ?`,
+      [id],
     );
 
     const roomPricesMap: Record<number, any[]> = {};
     roomPricesResult.forEach((rp: any) => {
       if (!roomPricesMap[rp.DORM_ROOM_ID]) roomPricesMap[rp.DORM_ROOM_ID] = [];
-      roomPricesMap[rp.DORM_ROOM_ID]!.push({ priceTypeId: rp.PRICE_TYPE_ID, price: rp.PRICE });
+      roomPricesMap[rp.DORM_ROOM_ID]!.push({
+        priceTypeId: rp.PRICE_TYPE_ID,
+        name: rp.PRICE_TYPE_NAME,
+        price: rp.PRICE,
+      });
     });
 
     const responseData: any = {
@@ -769,38 +777,54 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       const dormRoomId = drResult.insertId;
 
-      if (
-        room.perMonth !== null &&
-        room.perMonth !== undefined &&
-        room.perMonth !== "" &&
-        Number(room.perMonth) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-          [dormRoomId, room.perMonth],
-        );
-      }
-      if (
-        room.perTerm !== null &&
-        room.perTerm !== undefined &&
-        room.perTerm !== "" &&
-        Number(room.perTerm) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-          [dormRoomId, room.perTerm],
-        );
-      }
-      if (
-        room.perDay !== null &&
-        room.perDay !== undefined &&
-        room.perDay !== "" &&
-        Number(room.perDay) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-          [dormRoomId, room.perDay],
-        );
+      if (room.prices && Array.isArray(room.prices)) {
+        for (const p of room.prices) {
+          if (
+            p.price !== null &&
+            p.price !== undefined &&
+            p.price !== "" &&
+            Number(p.price) > 0
+          ) {
+            await conn.execute(
+              `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+              [dormRoomId, p.priceTypeId, p.price],
+            );
+          }
+        }
+      } else {
+        if (
+          room.perMonth !== null &&
+          room.perMonth !== undefined &&
+          room.perMonth !== "" &&
+          Number(room.perMonth) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+            [dormRoomId, room.perMonth],
+          );
+        }
+        if (
+          room.perTerm !== null &&
+          room.perTerm !== undefined &&
+          room.perTerm !== "" &&
+          Number(room.perTerm) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+            [dormRoomId, room.perTerm],
+          );
+        }
+        if (
+          room.perDay !== null &&
+          room.perDay !== undefined &&
+          room.perDay !== "" &&
+          Number(room.perDay) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+            [dormRoomId, room.perDay],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1229,38 +1253,54 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       const dormRoomId = drResult.insertId;
 
-      if (
-        room.perMonth !== null &&
-        room.perMonth !== undefined &&
-        room.perMonth !== "" &&
-        Number(room.perMonth) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
-          [dormRoomId, room.perMonth],
-        );
-      }
-      if (
-        room.perTerm !== null &&
-        room.perTerm !== undefined &&
-        room.perTerm !== "" &&
-        Number(room.perTerm) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
-          [dormRoomId, room.perTerm],
-        );
-      }
-      if (
-        room.perDay !== null &&
-        room.perDay !== undefined &&
-        room.perDay !== "" &&
-        Number(room.perDay) > 0
-      ) {
-        await conn.execute(
-          `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
-          [dormRoomId, room.perDay],
-        );
+      if (room.prices && Array.isArray(room.prices)) {
+        for (const p of room.prices) {
+          if (
+            p.price !== null &&
+            p.price !== undefined &&
+            p.price !== "" &&
+            Number(p.price) > 0
+          ) {
+            await conn.execute(
+              `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
+              [dormRoomId, p.priceTypeId, p.price],
+            );
+          }
+        }
+      } else {
+        if (
+          room.perMonth !== null &&
+          room.perMonth !== undefined &&
+          room.perMonth !== "" &&
+          Number(room.perMonth) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 1, ?)`,
+            [dormRoomId, room.perMonth],
+          );
+        }
+        if (
+          room.perTerm !== null &&
+          room.perTerm !== undefined &&
+          room.perTerm !== "" &&
+          Number(room.perTerm) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 2, ?)`,
+            [dormRoomId, room.perTerm],
+          );
+        }
+        if (
+          room.perDay !== null &&
+          room.perDay !== undefined &&
+          room.perDay !== "" &&
+          Number(room.perDay) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
+            [dormRoomId, room.perDay],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1335,26 +1375,35 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       uploadedUrls = await processAndUploadImages(files, dormId, ownerId);
     }
 
-    if (((req as any).user?.role === 1 || (req as any).user?.role === 3) && body.user_id) {
+    if (
+      ((req as any).user?.role === 1 || (req as any).user?.role === 3) &&
+      body.user_id
+    ) {
       const [oRows] = await conn.execute<RowDataPacket[]>(
         `SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ? ORDER BY REQ_STATUS ASC LIMIT 1`,
-        [body.user_id]
+        [body.user_id],
       );
       let newDormOwnerId;
       if (oRows.length > 0) {
         newDormOwnerId = oRows[0]!.DORM_OWNER_ID;
       } else {
-        const [uRows] = await conn.execute<RowDataPacket[]>(`SELECT USERNAME FROM USERS WHERE USER_ID = ?`, [body.user_id]);
+        const [uRows] = await conn.execute<RowDataPacket[]>(
+          `SELECT USERNAME FROM USERS WHERE USER_ID = ?`,
+          [body.user_id],
+        );
         if (uRows.length > 0) {
           const [ins] = await conn.execute<ResultSetHeader>(
             `INSERT INTO DORM_OWNERS (USER_ID, FIRST_NAME, LAST_NAME, REQ_STATUS, PROFILE_IMAGE) VALUES (?, ?, ?, 0, '')`,
-            [body.user_id, uRows[0]!.USERNAME, '(Assigned)']
+            [body.user_id, uRows[0]!.USERNAME, "(Assigned)"],
           );
           newDormOwnerId = ins.insertId;
         }
       }
       if (newDormOwnerId) {
-        await conn.execute(`UPDATE DORMITORIES SET DORM_OWNER_ID = ? WHERE DORM_ID = ?`, [newDormOwnerId, dormId]);
+        await conn.execute(
+          `UPDATE DORMITORIES SET DORM_OWNER_ID = ? WHERE DORM_ID = ?`,
+          [newDormOwnerId, dormId],
+        );
       }
     }
 
@@ -1583,7 +1632,7 @@ export const updateRoomTypes_fn = async (
         if (p.price !== null && p.price !== undefined && p.price > 0) {
           await conn.execute(
             `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, ?, ?)`,
-            [dormRoomId, p.priceTypeId, p.price]
+            [dormRoomId, p.priceTypeId, p.price],
           );
         }
       }
@@ -2510,12 +2559,19 @@ export const getAllBedTypes = async (req: Request, res: Response) => {
 export const addDormType = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_TYPES (DORM_TYPE_NAME) VALUES (?)",
-      [name]
+      [name],
     );
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2534,12 +2590,19 @@ export const deleteDormType = async (req: Request, res: Response) => {
 export const addRoomType = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
     const [result] = await dbcon.execute<any>(
       "INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)",
-      [name]
+      [name],
     );
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2558,9 +2621,19 @@ export const deleteRoomType = async (req: Request, res: Response) => {
 export const addBedType = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
-    const [result] = await dbcon.execute<any>("INSERT INTO BED_TYPES (BED_TYPE_NAME) VALUES (?)", [name]);
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO BED_TYPES (BED_TYPE_NAME) VALUES (?)",
+      [name],
+    );
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2578,7 +2651,9 @@ export const deleteBedType = async (req: Request, res: Response) => {
 
 export const getAllPriceTypes = async (req: Request, res: Response) => {
   try {
-    const [rows] = await dbcon.execute<RowDataPacket[]>("SELECT PRICE_TYPE_ID as id, PRICE_TYPE_NAME as name FROM PRICE_TYPES");
+    const [rows] = await dbcon.execute<RowDataPacket[]>(
+      "SELECT PRICE_TYPE_ID as id, PRICE_TYPE_NAME as name FROM PRICE_TYPES",
+    );
     res.json({ success: true, data: rows });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2588,9 +2663,19 @@ export const getAllPriceTypes = async (req: Request, res: Response) => {
 export const addPriceType = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
-    const [result] = await dbcon.execute<any>("INSERT INTO PRICE_TYPES (PRICE_TYPE_NAME) VALUES (?)", [name]);
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO PRICE_TYPES (PRICE_TYPE_NAME) VALUES (?)",
+      [name],
+    );
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2599,7 +2684,9 @@ export const addPriceType = async (req: Request, res: Response) => {
 export const deletePriceType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await dbcon.execute("DELETE FROM PRICE_TYPES WHERE PRICE_TYPE_ID = ?", [id]);
+    await dbcon.execute("DELETE FROM PRICE_TYPES WHERE PRICE_TYPE_ID = ?", [
+      id,
+    ]);
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2608,7 +2695,9 @@ export const deletePriceType = async (req: Request, res: Response) => {
 
 export const getAllDormStatuses = async (req: Request, res: Response) => {
   try {
-    const [rows] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID as id, DORM_STATUS_NAME as name FROM DORM_STATUSES");
+    const [rows] = await dbcon.execute<RowDataPacket[]>(
+      "SELECT DORM_STATUS_ID as id, DORM_STATUS_NAME as name FROM DORM_STATUSES",
+    );
     res.json({ success: true, data: rows });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2618,9 +2707,19 @@ export const getAllDormStatuses = async (req: Request, res: Response) => {
 export const addDormStatus = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
-    const [result] = await dbcon.execute<any>("INSERT INTO DORM_STATUSES (DORM_STATUS_NAME) VALUES (?)", [name]);
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
+    const [result] = await dbcon.execute<any>(
+      "INSERT INTO DORM_STATUSES (DORM_STATUS_NAME) VALUES (?)",
+      [name],
+    );
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2629,7 +2728,9 @@ export const addDormStatus = async (req: Request, res: Response) => {
 export const deleteDormStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await dbcon.execute("DELETE FROM DORM_STATUSES WHERE DORM_STATUS_ID = ?", [id]);
+    await dbcon.execute("DELETE FROM DORM_STATUSES WHERE DORM_STATUS_ID = ?", [
+      id,
+    ]);
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2639,17 +2740,26 @@ export const deleteDormStatus = async (req: Request, res: Response) => {
 export const addDormZone = async (req: Request, res: Response) => {
   try {
     const { name, lat, lng } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Zone name is required" });
-    
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Zone name is required" });
+
     // Default coordinates if not provided (Bangkok defaults)
-    const latitude = lat !== undefined && lat !== null && lat !== '' ? Number(lat) : 13.7563;
-    const longitude = lng !== undefined && lng !== null && lng !== '' ? Number(lng) : 100.5018;
+    const latitude =
+      lat !== undefined && lat !== null && lat !== "" ? Number(lat) : 13.7563;
+    const longitude =
+      lng !== undefined && lng !== null && lng !== "" ? Number(lng) : 100.5018;
 
     const [result] = await dbcon.execute<any>(
-      "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES) VALUES (?, ST_GeomFromText(?))", 
-      [name, `POINT(${latitude} ${longitude})`]
+      "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES) VALUES (?, ST_GeomFromText(?))",
+      [name, `POINT(${latitude} ${longitude})`],
     );
-    res.json({ success: true, message: "Added successfully", id: result.insertId });
+    res.json({
+      success: true,
+      message: "Added successfully",
+      id: result.insertId,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2746,7 +2856,7 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     // ดึงข้อมูลรูปภาพก่อนจะลบ
     const [facRows] = await conn.execute<RowDataPacket[]>(
       `SELECT FAC_TYPE_ICON FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`,
-      [fac_id]
+      [fac_id],
     );
 
     await conn.beginTransaction();
@@ -2777,46 +2887,61 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateMasterType = async (req: Request, res: Response) => {
   try {
     const { type, id } = req.params;
     const { name, lat, lng } = req.body;
 
-    if (!name) return res.status(400).json({ success: false, message: "Type name is required" });
+    if (!name)
+      return res
+        .status(400)
+        .json({ success: false, message: "Type name is required" });
 
     let query = "";
     let params: any[] = [];
 
     switch (type) {
-      case 'bed':
+      case "bed":
         query = "UPDATE BED_TYPES SET BED_TYPE_NAME = ? WHERE BED_TYPE_ID = ?";
         params = [name, id];
         break;
-      case 'dorm':
-        query = "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
+      case "dorm":
+        query =
+          "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
         params = [name, id];
         break;
-      case 'status':
-        query = "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
+      case "status":
+        query =
+          "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
         params = [name, id];
         break;
-      case 'price':
-        query = "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
+      case "price":
+        query =
+          "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
         params = [name, id];
         break;
-      case 'room':
-        query = "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
+      case "room":
+        query =
+          "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
         params = [name, id];
         break;
-      case 'zone':
-        const latitude = lat !== undefined && lat !== null && lat !== '' ? Number(lat) : 13.7563;
-        const longitude = lng !== undefined && lng !== null && lng !== '' ? Number(lng) : 100.5018;
-        query = "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?) WHERE ZONE_ID = ?";
+      case "zone":
+        const latitude =
+          lat !== undefined && lat !== null && lat !== ""
+            ? Number(lat)
+            : 13.7563;
+        const longitude =
+          lng !== undefined && lng !== null && lng !== ""
+            ? Number(lng)
+            : 100.5018;
+        query =
+          "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?) WHERE ZONE_ID = ?";
         params = [name, `POINT(${latitude} ${longitude})`, id];
         break;
       default:
-        return res.status(400).json({ success: false, message: "Invalid type" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid type" });
     }
 
     await dbcon.execute(query, params);
