@@ -63,7 +63,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.UPDATE_AT,
                 -- ✅ แก้: ดึงเฉพาะราคารายเดือน (PRICE_TYPE_ID = 1) เป็น start_price
                 -- ไม่ใช้ MIN(PRICE) ทั้งหมด เพราะรายวันอาจถูกกว่ารายเดือนทำให้ราคาผิด
-                MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END) as start_price
+                MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -203,7 +203,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.FRONT_DORM_IMAGE, 
         
         dz.ZONE_NAME,
-        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
         do.LAST_NAME,
@@ -253,7 +253,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.REQ_STATUS,
         
         dz.ZONE_NAME,
-        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+        COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
         do.LAST_NAME,
@@ -346,9 +346,9 @@ export const getDormById = async (req: Request, res: Response) => {
             dr.DORM_ROOM_ID,
             rt.ROOM_TYPE_ID,
             rt.ROOM_TYPE_NAME, 
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 1 THEN rp.PRICE END) as perMonth,
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 2 THEN rp.PRICE END) as perTerm,
-            MAX(CASE WHEN rp.PRICE_TYPE_ID = 3 THEN rp.PRICE END) as perDay,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE END) as perMonth,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เทอม%' LIMIT 1) THEN rp.PRICE END) as perTerm,
+            MAX(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%วัน%' LIMIT 1) THEN rp.PRICE END) as perDay,
             rb.BED_TYPE_ID,
             bt.BED_TYPE_NAME
         FROM DORM_ROOMS dr
@@ -1941,7 +1941,7 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     d.DORM_STATUS_ID, 
                     ds.DORM_STATUS_NAME, 
                     dz.ZONE_NAME,
-                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
                 FROM DORMITORIES d
                 JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
@@ -2051,15 +2051,16 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.FRONT_DORM_IMAGE as image, 
                   d.VIEW_COUNT,
                   dz.ZONE_NAME,
-                  /* 🌟 แก้ไขจุดที่ 6: หน้า Popular ก็ต้องยึดรายเดือน */
-                  COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
-                  d.DORM_STATUS_ID as status,
+                  COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                  d.DORM_STATUS_ID,
+                  ds.DORM_STATUS_NAME,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
               LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-              GROUP BY d.DORM_ID
+              LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME
               ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
               LIMIT ?
     `;
@@ -2365,12 +2366,14 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     dz.ZONE_NAME as zone, 
                     ST_X(d.COORDINATES) as lat, 
                     ST_Y(d.COORDINATES) as lng, 
-                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
-                    d.DORM_STATUS_ID as status
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                    d.DORM_STATUS_ID,
+                    ds.DORM_STATUS_NAME
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+                LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
                 WHERE d.DORM_STATUS_ID in (1, 3)
 
             `;
@@ -2421,7 +2424,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       }
     }
 
-    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID `;
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME `;
 
     const havingClauses = [];
     if (
@@ -2434,7 +2437,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const minP = Number(minPrice);
       if (!isNaN(minP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
         );
         params.push(minP);
       }
@@ -2449,7 +2452,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const maxP = Number(maxPrice);
       if (!isNaN(maxP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = 1 AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
         );
         params.push(maxP);
       }
