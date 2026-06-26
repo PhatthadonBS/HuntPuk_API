@@ -57,7 +57,6 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 ST_X(d.COORDINATES) as lat, 
                 ST_Y(d.COORDINATES) as lng, 
                 d.DORM_STATUS_ID as status,
-                ds.DORM_STATUS_NAME as statusName,
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
@@ -67,7 +66,6 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
-            LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
             LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE d.REQ_STATUS = 1
@@ -126,6 +124,14 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     // สั่งรัน Query ดึงข้อมูลจากฐานข้อมูล
     const [rows] = await dbcon.execute<RowDataPacket[]>(sql, queryParams);
+
+    // ดึงสถานะหอพักทั้งหมดมาจับคู่เพื่อลดภาระฐานข้อมูล (Loop foreach)
+    const [statuses] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES");
+    const statusMap: any = {};
+    statuses.forEach((s: any) => statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME);
+    rows.forEach((dorm: any) => {
+      dorm.statusName = statusMap[dorm.status] || 'ไม่ทราบสถานะ';
+    });
 
     // 📍 7. ค้นหาหอพักภายในรัศมีขอบเขตรอบจุดอ้างอิง (หมุดสีน้ำเงิน)
     let finalDorms = rows;
@@ -2104,19 +2110,25 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   dz.ZONE_NAME,
                   COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                   d.DORM_STATUS_ID,
-                  ds.DORM_STATUS_NAME,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
               LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
-              LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
-              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME
+              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID
               ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
               LIMIT ?
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
+
+    // ดึงสถานะหอพักทั้งหมดมาจับคู่เพื่อลดภาระฐานข้อมูล (Loop foreach)
+    const [statuses] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES");
+    const statusMap: any = {};
+    statuses.forEach((s: any) => statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME);
+    dorms.forEach((dorm: any) => {
+      dorm.DORM_STATUS_NAME = statusMap[dorm.DORM_STATUS_ID] || 'ไม่ทราบสถานะ';
+    });
 
     res.json({
       success: true,
