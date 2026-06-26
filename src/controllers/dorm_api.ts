@@ -57,6 +57,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 ST_X(d.COORDINATES) as lat, 
                 ST_Y(d.COORDINATES) as lng, 
                 d.DORM_STATUS_ID as status,
+                ds.DORM_STATUS_NAME as statusName,
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
@@ -66,6 +67,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
+            LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
             LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
             LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
             WHERE d.REQ_STATUS = 1
