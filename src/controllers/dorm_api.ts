@@ -126,11 +126,15 @@ export const getAllDorms = async (req: Request, res: Response) => {
     const [rows] = await dbcon.execute<RowDataPacket[]>(sql, queryParams);
 
     // ดึงสถานะหอพักทั้งหมดมาจับคู่เพื่อลดภาระฐานข้อมูล (Loop foreach)
-    const [statuses] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES");
+    const [statuses] = await dbcon.execute<RowDataPacket[]>(
+      "SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES",
+    );
     const statusMap: any = {};
-    statuses.forEach((s: any) => statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME);
+    statuses.forEach(
+      (s: any) => (statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME),
+    );
     rows.forEach((dorm: any) => {
-      dorm.statusName = statusMap[dorm.status] || 'ไม่ทราบสถานะ';
+      dorm.statusName = statusMap[dorm.status] || "ไม่ทราบสถานะ";
     });
 
     // 📍 7. ค้นหาหอพักภายในรัศมีขอบเขตรอบจุดอ้างอิง (หมุดสีน้ำเงิน)
@@ -571,6 +575,30 @@ export const addFacility_api = async (req: Request, res: Response) => {
       message: "เกิดข้อผิดพลาดภายในระบบ",
       error: error.message,
     });
+  } finally {
+    conn.release();
+  }
+};
+
+export const getFacilityReqCount_api = async (req: Request, res: Response) => {
+  const tokenUserId = (req as any).user?.id;
+  const targetUserId = req.query.user_id
+    ? Number(req.query.user_id)
+    : tokenUserId;
+
+  if (!targetUserId)
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+
+  const conn = await dbcon.getConnection();
+  try {
+    const [rows] = await conn.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) as count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
+      [targetUserId],
+    );
+
+    res.status(200).json({ success: true, count: rows[0]!["count"] || 0 });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Server Error" });
   } finally {
     conn.release();
   }
@@ -1427,6 +1455,31 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       await updateRoomTypes_fn(dormId, body.roomTypes, conn);
     }
 
+    if (body.new_facilities) {
+      let newFacArr: any[] = [];
+      try {
+        newFacArr =
+          typeof body.new_facilities === "string"
+            ? JSON.parse(body.new_facilities)
+            : body.new_facilities;
+      } catch (e) {}
+
+      const reqUserId = (req as any).user?.id || ownerRows[0]?.USER_ID;
+
+      for (const fac of newFacArr) {
+        if (!fac.name) continue;
+        const [facResult] = await conn.execute<ResultSetHeader>(
+          `INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, STATUS, ADD_BY) VALUES (?, ?, 1, ?)`,
+          [fac.name.trim(), fac.icon || null, reqUserId],
+        );
+        const newFacId = facResult.insertId;
+        await conn.execute(
+          `INSERT INTO FACILITIES_DORMS (DORM_ID, FAC_TYPE_ID, STATUS) VALUES (?, ?, 0)`,
+          [dormId, newFacId],
+        );
+      }
+    }
+
     if (Object.keys(uploadedUrls).length > 0) {
       await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
       await updateGalleryImages_fn(dormId, uploadedUrls, conn);
@@ -2125,11 +2178,15 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
 
     // ดึงสถานะหอพักทั้งหมดมาจับคู่เพื่อลดภาระฐานข้อมูล (Loop foreach)
-    const [statuses] = await dbcon.execute<RowDataPacket[]>("SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES");
+    const [statuses] = await dbcon.execute<RowDataPacket[]>(
+      "SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES",
+    );
     const statusMap: any = {};
-    statuses.forEach((s: any) => statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME);
+    statuses.forEach(
+      (s: any) => (statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME),
+    );
     dorms.forEach((dorm: any) => {
-      dorm.DORM_STATUS_NAME = statusMap[dorm.DORM_STATUS_ID] || 'ไม่ทราบสถานะ';
+      dorm.DORM_STATUS_NAME = statusMap[dorm.DORM_STATUS_ID] || "ไม่ทราบสถานะ";
     });
 
     res.json({

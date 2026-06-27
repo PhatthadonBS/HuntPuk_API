@@ -131,6 +131,7 @@ router.put('/api/spec/dorm/:id', verifyToken, imgTypeUploads, dormController.upd
 router.get('/api/spec/dorm/:id', dormController.getDormsByOwner_api)//pass
 router.delete('/api/spec/review/:id', verifyToken, dormController.deleteReview_api)//pass
 router.get('/api/dorms/review/:id', dormController.getReviewsByDormId_api);//pass
+router.get('/api/dorms/facility-req-count', verifyToken, dormController.getFacilityReqCount_api);
 router.get('/api/dorms/:id', dormController.getDormById);//pass
 router.get('/api/dorms/facility/:dorm_id', dormController.getFacilitiesOfDorm_api);//pass
 router.put('/api/dorms/facility/:user_id', verifyToken, upload.single("icon"), dormController.updateFacility_api);//pass
