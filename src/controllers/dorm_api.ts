@@ -2150,6 +2150,57 @@ export const getPendingOwners_api = async (req: Request, res: Response) => {
   }
 };
 
+export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
+  try {
+    const { search, status } = req.query;
+    let sql = `
+        SELECT 
+        do.*,
+        u.USERNAME,
+        u.EMAIL,
+        u.PHONE_NUMBER,
+        u.ACCOUNT_STATUS,
+        u.ROLE_TYPE_ID
+
+      FROM DORM_OWNERS do
+      JOIN USERS u ON do.USER_ID = u.USER_ID
+      WHERE 1=1
+    `;
+
+    const params: any[] = [];
+
+    if (status !== undefined && status !== null && status !== "") {
+      sql += ` AND do.REQ_STATUS = ?`;
+      params.push(Number(status));
+    } else {
+      sql += ` AND do.REQ_STATUS = 0`;
+    }
+
+    if (search && search.toString().trim() !== "") {
+      const searchTerm = `%${search.toString().trim()}%`;
+      sql += ` AND (do.FIRST_NAME LIKE ? OR do.LAST_NAME LIKE ? OR u.USERNAME LIKE ?)`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    sql += ` ORDER BY do.DORM_OWNER_ID DESC`;
+
+    const [owners] = await dbcon.query<RowDataPacket[]>(sql, params);
+
+    res.json({
+      success: true,
+      count: owners.length,
+      data: owners,
+    });
+  } catch (error: any) {
+    console.error("Get All Owner Requests Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูลคำขอเจ้าของหอพัก",
+      error: error.message,
+    });
+  }
+};
+
 export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;

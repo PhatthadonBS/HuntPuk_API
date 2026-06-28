@@ -63,6 +63,7 @@ router.post('/api/user/dormOwner', verifyToken, upload.single("file"), userContr
 router.put('/api/user/approve', verifyToken, userController.approveDormOwner);//pass
 router.post('/api/user/review', verifyToken, dormController.addReview_api);//pass
 router.get('/api/user/dormOwnerReq', verifyToken, dormController.getPendingOwners_api);//pass
+router.get('/api/user/dormOwnerReqAll', verifyToken, dormController.getAllOwnerRequests_api);
    
 
 // auth group
