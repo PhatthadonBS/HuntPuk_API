@@ -1035,7 +1035,7 @@ export async function getUser(email: string) {
 export async function getUsers_fn() {
   const [users] = await dbcon.execute<UserAllGetRes[]>(
     `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, 
-            DO.FIRST_NAME, DO.LAST_NAME 
+            DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE 
      FROM USERS U 
      LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID 
      WHERE U.ROLE_TYPE_ID IN (1, 2)`,
