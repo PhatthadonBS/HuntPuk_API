@@ -2536,6 +2536,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     d.SCORE, 
                     d.FRONT_DORM_IMAGE as image, 
                     d.UPDATE_AT as update_at,
+                    d.ZONE_ID,
                     dz.ZONE_NAME as zone, 
                     ST_X(d.COORDINATES) as lat, 
                     ST_Y(d.COORDINATES) as lng, 

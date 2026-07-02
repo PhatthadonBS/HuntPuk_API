@@ -28,21 +28,32 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
     );
     const zoneCount = zoneCountResult[0]?.count || 0;
 
-    // 5. Popular Dorm (Most Views)
-    const [popularDormResult] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT DORM_ID as dormId, DORM_NAME as dormName, VIEW_COUNT as views FROM DORMITORIES ORDER BY VIEW_COUNT DESC LIMIT 5"
-    );
-    const topPopularDorms = popularDormResult || [];
+    const [popularDormResult] = await dbcon.execute<RowDataPacket[]>(`
+      SELECT 
+        d.DORM_ID as dormId, 
+        d.DORM_NAME as dormName, 
+        (
+          COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+          COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+        ) as views 
+      FROM DORMITORIES d 
+      ORDER BY views DESC
+    `);
+    const allDormViews = popularDormResult || [];
+    const topPopularDorms = allDormViews.slice(0, 5);
     const popularDorm = topPopularDorms[0] || { dormName: "N/A", views: 0 };
+    const totalDormViews = allDormViews.reduce((sum: number, dorm: any) => sum + Number(dorm.views), 0);
+
+
 
     // 6. Total Website Views (Historical + Current Month)
     const [historicalViewsResult] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT SUM(VIEW_COUNT) AS count FROM STATISTIC_WEB_VIEW WHERE DORM_ID IS NULL"
+      "SELECT SUM(VIEW_COUNT) AS count FROM STATISTIC_WEB_VIEW"
     );
     const historicalViews = Number(historicalViewsResult[0]?.count) || 0;
 
     const [currentViewsResult] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) AS count FROM WEB_VIEW_LOGS WHERE DORM_ID IS NULL"
+      "SELECT COUNT(*) AS count FROM WEB_VIEW_LOGS"
     );
     const currentViews = Number(currentViewsResult[0]?.count) || 0;
 
@@ -129,6 +140,8 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
         popularDormName: popularDorm.dormName,
         popularDormViews: popularDorm.views,
         topPopularDorms,
+        allDormViews,
+        totalDormViews,
         zoneBreakdown: zoneBreakdown || [],
         dormStatusBreakdown: dormStatusBreakdown || [],
         dormTypeBreakdown: dormTypeBreakdown || [],
