@@ -34,9 +34,15 @@ export const OTP_Verify_api = async (req: Request, res: Response) => {
   };
   try {
     const verify = await OTP_Verify_fn(data.dotp, data.demail);
-    return res
-      .status(201)
-      .json({ status: verify.status, email: verify.email, msg: verify.msg });
+    if (verify.status) {
+      return res
+        .status(200)
+        .json({ status: verify.status, email: verify.email, msg: verify.msg });
+    } else {
+      return res
+        .status(400)
+        .json({ status: verify.status, email: verify.email, msg: verify.msg });
+    }
   } catch (error) {
     res.status(401).json({ error: error });
   }

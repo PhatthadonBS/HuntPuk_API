@@ -394,6 +394,7 @@ export const getDormById = async (req: Request, res: Response) => {
 
     const gallery: string[] = [];
     const roomImgKeywords: Record<string, string> = {
+      bed: "bed_img",
       ceiling: "ceiling_img",
       wall: "wall_img",
       floor: "floor_img",
@@ -2365,7 +2366,7 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       
-      WHERE d.REQ_STATUS IN (0, 2, 3)  
+      WHERE d.REQ_STATUS IN (0, 2, 3, 4)  
       ORDER BY d.REG_AT ASC   
     `;
 
