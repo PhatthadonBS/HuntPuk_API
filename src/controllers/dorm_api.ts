@@ -321,12 +321,14 @@ export const getDormById = async (req: Request, res: Response) => {
         do.INSTAGRAM AS OWNER_INSTAGRAM, 
         do.X AS OWNER_X, 
         do.TELEGRAM AS OWNER_TELEGRAM,
-        ds.DORM_STATUS_NAME
+        ds.DORM_STATUS_NAME,
+        dt.DORM_TYPE_NAME
       FROM DORMITORIES d
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
       LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+      LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       WHERE d.DORM_ID = ?
     `;
 
