@@ -4,9 +4,9 @@ import { RowDataPacket } from "mysql2";
 
 export const getDashboardStats_api = async (req: Request, res: Response) => {
   try {
-    // 1. Dorm Count
+    // 1. Dorm Count (Only approved and not deleted)
     const [dormCountResult] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) AS count FROM DORMITORIES"
+      "SELECT COUNT(*) AS count FROM DORMITORIES WHERE REQ_STATUS = 1 AND DORM_STATUS_ID != 4"
     );
     const dormCount = dormCountResult[0]?.count || 0;
 
@@ -37,6 +37,7 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
           COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
         ) as views 
       FROM DORMITORIES d 
+      WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
       ORDER BY views DESC
     `);
     const allDormViews = popularDormResult || [];
@@ -59,9 +60,10 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
 
     const totalWebsiteViews = historicalViews + currentViews;
 
-    // 7. Zone Breakdown
+    // 7. Zone Breakdown (Only count approved and not deleted dorms)
     const [zoneBreakdown] = await dbcon.execute<RowDataPacket[]>(
-      `SELECT dz.ZONE_ID as zoneId, dz.ZONE_NAME as zoneName, COUNT(d.DORM_ID) as dormCount 
+      `SELECT dz.ZONE_ID as zoneId, dz.ZONE_NAME as zoneName, 
+              COUNT(CASE WHEN d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4 THEN d.DORM_ID END) as dormCount 
        FROM DORM_ZONES dz 
        LEFT JOIN DORMITORIES d ON dz.ZONE_ID = d.ZONE_ID 
        GROUP BY dz.ZONE_ID`
@@ -69,13 +71,16 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
 
     // 8. Dorm Status & Type Breakdown
     const [dormStatusBreakdown] = await dbcon.execute<RowDataPacket[]>(
-      `SELECT ds.DORM_STATUS_NAME as statusName, COUNT(d.DORM_ID) as count
+      `SELECT ds.DORM_STATUS_NAME as statusName, 
+              COUNT(CASE WHEN d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4 THEN d.DORM_ID END) as count
        FROM DORM_STATUSES ds
        LEFT JOIN DORMITORIES d ON ds.DORM_STATUS_ID = d.DORM_STATUS_ID
+       WHERE ds.DORM_STATUS_ID != 4
        GROUP BY ds.DORM_STATUS_ID`
     );
     const [dormTypeBreakdown] = await dbcon.execute<RowDataPacket[]>(
-      `SELECT dt.DORM_TYPE_NAME as typeName, COUNT(d.DORM_ID) as count
+      `SELECT dt.DORM_TYPE_NAME as typeName, 
+              COUNT(CASE WHEN d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4 THEN d.DORM_ID END) as count
        FROM DORM_TYPES dt
        LEFT JOIN DORMITORIES d ON dt.DORM_TYPE_ID = d.DORM_TYPE_ID
        GROUP BY dt.DORM_TYPE_ID`

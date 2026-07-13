@@ -369,7 +369,7 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 //ดึงข้อมูลมา ถ้าไม่อันไหนไม่update ให้เอาข้อมูลเก่ายัดใส่แทน (!!!ยัดข้อมูลเก่าตั้งแต่ front เด้อค่อยส่งมา!!!)
 export const updateUser_api = async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { username, phone_number, first_name, last_name } = req.body;
+  const { username, phone_number, first_name, last_name, facebook, line, instagram, x, telegram } = req.body;
   const file = req.file;
 
   const conn = await dbcon.getConnection();
@@ -423,6 +423,13 @@ export const updateUser_api = async (req: Request, res: Response) => {
       let updateOwnerSql =
         "UPDATE DORM_OWNERS SET FIRST_NAME = ?, LAST_NAME = ?";
       const ownerParams: any[] = [first_name, last_name];
+
+      // อัปเดต social media fields ถ้ามีส่งมา
+      if (facebook !== undefined) { updateOwnerSql += ", FACEBOOK = ?"; ownerParams.push(facebook || null); }
+      if (line !== undefined) { updateOwnerSql += ", LINE = ?"; ownerParams.push(line || null); }
+      if (instagram !== undefined) { updateOwnerSql += ", INSTAGRAM = ?"; ownerParams.push(instagram || null); }
+      if (x !== undefined) { updateOwnerSql += ", X = ?"; ownerParams.push(x || null); }
+      if (telegram !== undefined) { updateOwnerSql += ", TELEGRAM = ?"; ownerParams.push(telegram || null); }
 
       if (file) {
         if (existingOwner.length > 0 && existingOwner[0]?.PROFILE_IMAGE) {

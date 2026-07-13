@@ -2225,7 +2225,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
               LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
               GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID
-              ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC
+              ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC
               LIMIT ?
     `;
 
