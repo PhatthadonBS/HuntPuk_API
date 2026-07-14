@@ -1516,7 +1516,7 @@ export const updateDormInfo_fn = async (
     [dormId],
   );
 
-  if (oldData[0]?.REQ_STATUS === 2) {
+  if (oldData[0]?.REQ_STATUS === 2 || oldData[0]?.REQ_STATUS === 4) {
     sql += ", REQ_STATUS = 3";
   }
 
