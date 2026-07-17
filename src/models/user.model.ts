@@ -36,6 +36,12 @@ export interface UserAllGetRes extends RowDataPacket {
     ACCOUNT_STATUS: number;
     FIRST_NAME?:    string;
     LAST_NAME?:     string;
+    PROFILE_IMAGE?: string;
+    FACEBOOK?:      string | null;
+    INSTAGRAM?:     string | null;
+    LINE?:          string | null;
+    TELEGRAM?:      string | null;
+    X?:             string | null;
 }
 
 export interface UserDormOwnerReqPostReq {
