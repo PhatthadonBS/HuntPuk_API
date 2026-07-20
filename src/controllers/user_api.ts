@@ -323,7 +323,7 @@ export const getUser_api = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
     const [users] = await dbcon.execute<UserAllGetRes[]>(
-      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
+      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE, DO.FACEBOOK, DO.LINE, DO.INSTAGRAM, DO.TELEGRAM, DO.X FROM USERS U LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID WHERE U.USER_ID = ?`,
       [id.toString().trim()],
     );
     if (users.length > 0) {

@@ -2543,8 +2543,19 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
 
 export const getAllDormMB = async (req: Request, res: Response) => {
   try {
-    const { search, zone, minPrice, maxPrice, lat, lng, radius, score } =
-      req.query;
+    const {
+      search,
+      zone,
+      minPrice,
+      maxPrice,
+      lat,
+      lng,
+      radius,
+      score,
+      maxWater,
+      maxElect,
+      sortByPrice,
+    } = req.query;
     const trimmedSearch = search ? search.toString().trim() : "";
     const userRole = (req as any).user?.role;
 
@@ -2560,7 +2571,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     dz.ZONE_NAME as zone, 
                     ST_X(d.COORDINATES) as lat, 
                     ST_Y(d.COORDINATES) as lng, 
-                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
+                    COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                     d.DORM_STATUS_ID,
                     ds.DORM_STATUS_NAME
                 FROM DORMITORIES d
@@ -2602,6 +2613,32 @@ export const getAllDormMB = async (req: Request, res: Response) => {
     }
 
     if (
+      maxWater &&
+      maxWater !== "" &&
+      maxWater !== "null" &&
+      maxWater !== "undefined"
+    ) {
+      const maxWNum = Number(maxWater);
+      if (!isNaN(maxWNum)) {
+        sql += ` AND d.WATER_UNIT <= ? `;
+        params.push(maxWNum, maxWNum);
+      }
+    }
+
+    if (
+      maxElect &&
+      maxElect !== "" &&
+      maxElect !== "null" &&
+      maxElect !== "undefined"
+    ) {
+      const maxENum = Number(maxElect);
+      if (!isNaN(maxENum)) {
+        sql += ` AND d.ELECT_UNIT <= ? `;
+        params.push(maxENum);
+      }
+    }
+
+    if (
       lat &&
       lng &&
       radius &&
@@ -2631,7 +2668,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const minP = Number(minPrice);
       if (!isNaN(minP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0) >= ?`,
         );
         params.push(minP);
       }
@@ -2646,7 +2683,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       const maxP = Number(maxPrice);
       if (!isNaN(maxP)) {
         havingClauses.push(
-          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
+          `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0) <= ?`,
         );
         params.push(maxP);
       }
@@ -2656,7 +2693,11 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       sql += ` HAVING ` + havingClauses.join(" AND ");
     }
 
-    sql += ` ORDER BY d.UPDATE_AT DESC `;
+    if (sortByPrice === "desc") {
+      sql += ` ORDER BY start_price DESC, d.UPDATE_AT DESC `;
+    } else {
+      sql += ` ORDER BY CASE WHEN start_price = 0 THEN 1 ELSE 0 END ASC, start_price ASC, d.UPDATE_AT DESC `;
+    }
 
     const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
     res.json({ success: true, data: dorms });
