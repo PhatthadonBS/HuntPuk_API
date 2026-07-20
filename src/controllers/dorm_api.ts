@@ -1483,9 +1483,11 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       }
     }
 
-    if (Object.keys(uploadedUrls).length > 0) {
-      await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
-      await updateGalleryImages_fn(dormId, uploadedUrls, conn);
+    if (Object.keys(uploadedUrls).length > 0 || body.remaining_gallery) {
+      if (Object.keys(uploadedUrls).length > 0) {
+        await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
+      }
+      await updateGalleryImages_fn(dormId, uploadedUrls, body.remaining_gallery, conn);
     }
 
     await conn.commit();
@@ -1777,40 +1779,54 @@ export const updateRoomComponentImages_fn = async (
 export const updateGalleryImages_fn = async (
   dormId: number,
   uploadedUrls: Record<string, string | string[]>,
+  remainingGalleryJson: string | undefined,
   conn: PoolConnection,
 ) => {
-  if (!uploadedUrls["OTHER_IMG"]) return;
+  let remainingGallery: string[] = [];
+  if (remainingGalleryJson) {
+    try {
+      remainingGallery = JSON.parse(remainingGalleryJson);
+    } catch (e) {
+      remainingGallery = [];
+    }
+  }
 
-  const newUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
-    ? uploadedUrls["OTHER_IMG"]
-    : [uploadedUrls["OTHER_IMG"]];
-
-  if (newUrls.length === 0) return;
-
+  // 1. Get all images from DORM_IMAGES table
   const [allImages] = await conn.execute<RowDataPacket[]>(
     "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
     [dormId],
   );
 
-  for (const [i, newUrl] of newUrls.entries()) {
-    const keyword = `other_${i}`;
+  // 2. Filter out room component images (they are handled by updateRoomComponentImages_fn)
+  const roomKeywords = ["bed", "ceiling", "wall", "floor", "bathroom", "balcony"];
+  const galleryImagesInDb = allImages.filter((img: any) => {
+    if (!img.IMAGE_PATH) return false;
+    const path = img.IMAGE_PATH.toLowerCase();
+    return !roomKeywords.some(kw => path.includes(kw));
+  });
 
-    const oldImg = allImages.find(
-      (img: any) => img.IMAGE_PATH && img.IMAGE_PATH.includes(keyword),
-    );
-
-    if (oldImg) {
-      await deleteFromGCS(oldImg.IMAGE_PATH);
-
-      await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [
-        oldImg.DORM_IMG_ID,
-      ]);
+  // 3. Delete gallery images that are NOT in remainingGallery
+  if (remainingGalleryJson !== undefined) {
+    for (const dbImg of galleryImagesInDb) {
+      if (!remainingGallery.includes(dbImg.IMAGE_PATH)) {
+        await deleteFromGCS(dbImg.IMAGE_PATH);
+        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [dbImg.DORM_IMG_ID]);
+      }
     }
+  }
 
-    await conn.execute(
-      "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)",
-      [dormId, newUrl],
-    );
+  // 4. Insert new gallery images
+  if (uploadedUrls["OTHER_IMG"]) {
+    const newUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
+      ? uploadedUrls["OTHER_IMG"]
+      : [uploadedUrls["OTHER_IMG"]];
+
+    for (const newUrl of newUrls) {
+      await conn.execute(
+        "INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)",
+        [dormId, newUrl],
+      );
+    }
   }
 };
 
@@ -2224,6 +2240,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
               LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+              WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID IN (1, 3)
               GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID
               ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC
               LIMIT ?
