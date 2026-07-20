@@ -173,17 +173,22 @@ export const registerSec2 = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {
     if (verStatus || admin) {
+      const roleId = admin && userData["role"] === 'owner' ? 2 : 1;
+
       conn.beginTransaction();
       const [rows] = await conn.execute<ResultSetHeader>(
-        "INSERT INTO USERS (USERNAME, EMAIL, PASSWORD, PHONE_NUMBER) VALUES (?, ?, ?, ?)",
-        [data.username, data.email, data.password, data.phone],
+        "INSERT INTO USERS (USERNAME, EMAIL, PASSWORD, PHONE_NUMBER, ROLE_TYPE_ID) VALUES (?, ?, ?, ?, ?)",
+        [data.username, data.email, data.password, data.phone, roleId],
       );
       conn.commit();
 
       if (rows.affectedRows > 0) {
-        return res.status(201).json("สมัครสมาชิกสำเร็จ");
+        return res.status(201).json({
+          message: "สมัครสมาชิกสำเร็จ",
+          user_id: rows.insertId
+        });
       } else {
-        return res.status(400).json("สมัครสมาชิกไม่สำเร็จ");
+        return res.status(400).json({ message: "สมัครสมาชิกไม่สำเร็จ" });
       }
     } else {
       return res.status(400).json("สมัครสมาชิกไม่สำเร็จ");
@@ -676,10 +681,13 @@ export const removeFavorite_api = async (req: Request, res: Response) => {
 export const requestDormOwner_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   let publicUrl: string | null = null;
+  const isAdmin = (req as any).user?.role === 3;
+  const reqStatus = isAdmin ? 1 : 0;
 
   try {
-    const {
+    let {
       user_id,
+      email,
       first_name,
       last_name,
       facebook,
@@ -693,7 +701,18 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     const file = req.file;
 
     const users = await getUsers_fn();
-    const user = users.find((u) => u.USER_ID == Number(user_id));
+    let user = users.find((u) => u.USER_ID == Number(user_id));
+
+    if (isAdmin && email) {
+      const foundUser = users.find((u) => u.EMAIL?.toLowerCase() === email.toString().trim().toLowerCase());
+      if (foundUser) {
+        user_id = foundUser.USER_ID;
+        user = foundUser;
+      } else {
+        return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ (ไม่พบอีเมล)" });
+      }
+    }
+
     if (!user)
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
 
@@ -742,7 +761,7 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
 
           const updateSql = `
             UPDATE DORM_OWNERS 
-            SET FIRST_NAME = ?, LAST_NAME = ?, FACEBOOK = ?, LINE = ?, X = ?, INSTAGRAM = ?, TELEGRAM = ?, PROFILE_IMAGE = ?, REQ_STATUS = 0
+            SET FIRST_NAME = ?, LAST_NAME = ?, FACEBOOK = ?, LINE = ?, X = ?, INSTAGRAM = ?, TELEGRAM = ?, PROFILE_IMAGE = ?, REQ_STATUS = ?
             WHERE USER_ID = ?
           `;
           const updateParams = [
@@ -754,6 +773,7 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
             instagram || null,
             telegramLink || null,
             publicUrl,
+            reqStatus,
             user_id,
           ];
 
@@ -836,7 +856,15 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     await conn.beginTransaction();
 
     // 3. เรียกฟังก์ชัน Insert ลง DB
-    const result = await requestDormOwner_fn(conn, userData, publicUrl);
+    const result = await requestDormOwner_fn(conn, userData, publicUrl, reqStatus);
+
+    if (isAdmin) {
+      // Auto-approve: update the target user's role to 2 (owner) in the database immediately
+      await conn.execute(
+        "UPDATE USERS SET ROLE_TYPE_ID = 2 WHERE USER_ID = ?;",
+        [userData.user_id],
+      );
+    }
 
     await conn.commit();
 
@@ -989,6 +1017,7 @@ export async function requestDormOwner_fn(
   conn: PoolConnection,
   userData: UserDormOwnerReqPostReq,
   publicUrl: string,
+  reqStatus: number = 0,
 ) {
   const lineLink = normalizeLineID(userData?.line);
   const telegramLink = normalizeThaiPhone(userData?.telegram);
@@ -996,8 +1025,8 @@ export async function requestDormOwner_fn(
   try {
     const sql = `
           INSERT INTO DORM_OWNERS 
-          (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, PROFILE_IMAGE)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (USER_ID, FIRST_NAME, LAST_NAME, FACEBOOK, LINE, X, INSTAGRAM, TELEGRAM, PROFILE_IMAGE, REQ_STATUS)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
     const params = [
@@ -1010,6 +1039,7 @@ export async function requestDormOwner_fn(
       userData.instagram || null,
       telegramLink || null,
       publicUrl,
+      reqStatus,
     ];
 
     const [result] = await conn.execute<ResultSetHeader>(sql, params);
