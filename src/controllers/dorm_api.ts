@@ -975,25 +975,21 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Insert Other Images (Gallery)
-    if (uploadedUrls["OTHER_IMG"]) {
-      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
-        ? uploadedUrls["OTHER_IMG"]
-        : [uploadedUrls["OTHER_IMG"]];
-
-      for (const url of otherUrls) {
-        await conn.execute(
-          `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-          [dormId, url],
-        );
-      }
-    }
+    // 5. Update Other Images (Gallery) and handle deletions
+    const remainingGalleryJson = req.body.remainingGallery;
+    await updateGalleryImages_fn(
+      dormId,
+      uploadedUrls,
+      remainingGalleryJson,
+      conn,
+    );
 
     // 6. Set up room components images
     const roomImgFieldMap: Record<string, number> = {
       CEILING_IMG: 1,
       WALL_IMG: 2,
       FLOOR_IMG: 3,
+      BED_IMG: 4,
       BATHROOM_IMG: 5,
       BALCONY_IMG: 6,
     };
@@ -1487,7 +1483,12 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       if (Object.keys(uploadedUrls).length > 0) {
         await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
       }
-      await updateGalleryImages_fn(dormId, uploadedUrls, body.remaining_gallery, conn);
+      await updateGalleryImages_fn(
+        dormId,
+        uploadedUrls,
+        body.remaining_gallery,
+        conn,
+      );
     }
 
     await conn.commit();
@@ -1798,11 +1799,18 @@ export const updateGalleryImages_fn = async (
   );
 
   // 2. Filter out room component images (they are handled by updateRoomComponentImages_fn)
-  const roomKeywords = ["bed", "ceiling", "wall", "floor", "bathroom", "balcony"];
+  const roomKeywords = [
+    "bed",
+    "ceiling",
+    "wall",
+    "floor",
+    "bathroom",
+    "balcony",
+  ];
   const galleryImagesInDb = allImages.filter((img: any) => {
     if (!img.IMAGE_PATH) return false;
     const path = img.IMAGE_PATH.toLowerCase();
-    return !roomKeywords.some(kw => path.includes(kw));
+    return !roomKeywords.some((kw) => path.includes(kw));
   });
 
   // 3. Delete gallery images that are NOT in remainingGallery
@@ -1810,7 +1818,9 @@ export const updateGalleryImages_fn = async (
     for (const dbImg of galleryImagesInDb) {
       if (!remainingGallery.includes(dbImg.IMAGE_PATH)) {
         await deleteFromGCS(dbImg.IMAGE_PATH);
-        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [dbImg.DORM_IMG_ID]);
+        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [
+          dbImg.DORM_IMG_ID,
+        ]);
       }
     }
   }
