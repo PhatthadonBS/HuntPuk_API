@@ -595,7 +595,7 @@ export const getFacilityReqCount_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {
     const [rows] = await conn.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
+      "SELECT COUNT(*) as count FROM FACILITIES_TYPES WHERE ADD_BY = ? AND STATUS = 1",
       [targetUserId],
     );
 
