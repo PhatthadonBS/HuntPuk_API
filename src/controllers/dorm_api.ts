@@ -897,7 +897,7 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
   const dormId = Number(id);
   const files = req.files as MulterFiles;
 
-  if (!files || Object.keys(files).length === 0) {
+  if ((!files || Object.keys(files).length === 0) && !req.body.remainingGallery) {
     return res
       .status(400)
       .json({ success: false, message: "ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด" });
@@ -2583,12 +2583,15 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     ST_Y(d.COORDINATES) as lng, 
                     COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                     d.DORM_STATUS_ID,
-                    ds.DORM_STATUS_NAME
+                    ds.DORM_STATUS_NAME,
+                    d.DORM_TYPE_ID,
+                    dt.DORM_TYPE_NAME
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+                LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
                 WHERE d.DORM_STATUS_ID in (1, 3)
 
             `;
