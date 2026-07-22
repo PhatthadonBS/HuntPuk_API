@@ -14,7 +14,16 @@ const app = express();
 // 1. Trust proxy if behind a load balancer (common for cloud deploys)
 app.set('trust proxy', 1);
 
-// 2. Global Rate Limiter
+// 2. CORS Configuration (MUST be before Rate Limiter to handle preflight)
+app.use(
+  cors({
+    origin: "*", // Adjust this to specific domains in production
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
+  })
+);
+
+// 3. Global Rate Limiter
 export const globalLimiter = rateLimit({
   windowMs: 3 * 60 * 1000, // 3 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
@@ -24,15 +33,6 @@ export const globalLimiter = rateLimit({
 });
 
 app.use(globalLimiter);
-
-// 3. CORS Configuration
-app.use(
-  cors({
-    origin: "*", // Adjust this to specific domains in production
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
-  })
-);
 
 // 4. Body Parsers (Built-in Express)
 app.use(express.json());

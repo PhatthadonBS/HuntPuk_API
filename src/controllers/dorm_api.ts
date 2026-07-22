@@ -599,7 +599,7 @@ export const getFacilityReqCount_api = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {
     const [rows] = await conn.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
+      "SELECT COUNT(*) as count FROM FACILITIES_TYPES WHERE ADD_BY = ? AND STATUS = 1",
       [targetUserId],
     );
 
@@ -901,7 +901,7 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
   const dormId = Number(id);
   const files = req.files as MulterFiles;
 
-  if (!files || Object.keys(files).length === 0) {
+  if ((!files || Object.keys(files).length === 0) && !req.body.remainingGallery) {
     return res
       .status(400)
       .json({ success: false, message: "ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด" });
@@ -979,25 +979,21 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Insert Other Images (Gallery)
-    if (uploadedUrls["OTHER_IMG"]) {
-      const otherUrls = Array.isArray(uploadedUrls["OTHER_IMG"])
-        ? uploadedUrls["OTHER_IMG"]
-        : [uploadedUrls["OTHER_IMG"]];
-
-      for (const url of otherUrls) {
-        await conn.execute(
-          `INSERT INTO DORM_IMAGES (DORM_ID, IMAGE_PATH) VALUES (?, ?)`,
-          [dormId, url],
-        );
-      }
-    }
+    // 5. Update Other Images (Gallery) and handle deletions
+    const remainingGalleryJson = req.body.remainingGallery;
+    await updateGalleryImages_fn(
+      dormId,
+      uploadedUrls,
+      remainingGalleryJson,
+      conn,
+    );
 
     // 6. Set up room components images
     const roomImgFieldMap: Record<string, number> = {
       CEILING_IMG: 1,
       WALL_IMG: 2,
       FLOOR_IMG: 3,
+      BED_IMG: 4,
       BATHROOM_IMG: 5,
       BALCONY_IMG: 6,
     };
@@ -1491,7 +1487,12 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       if (Object.keys(uploadedUrls).length > 0) {
         await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
       }
-      await updateGalleryImages_fn(dormId, uploadedUrls, body.remaining_gallery, conn);
+      await updateGalleryImages_fn(
+        dormId,
+        uploadedUrls,
+        body.remaining_gallery,
+        conn,
+      );
     }
 
     await conn.commit();
@@ -1802,11 +1803,18 @@ export const updateGalleryImages_fn = async (
   );
 
   // 2. Filter out room component images (they are handled by updateRoomComponentImages_fn)
-  const roomKeywords = ["bed", "ceiling", "wall", "floor", "bathroom", "balcony"];
+  const roomKeywords = [
+    "bed",
+    "ceiling",
+    "wall",
+    "floor",
+    "bathroom",
+    "balcony",
+  ];
   const galleryImagesInDb = allImages.filter((img: any) => {
     if (!img.IMAGE_PATH) return false;
     const path = img.IMAGE_PATH.toLowerCase();
-    return !roomKeywords.some(kw => path.includes(kw));
+    return !roomKeywords.some((kw) => path.includes(kw));
   });
 
   // 3. Delete gallery images that are NOT in remainingGallery
@@ -1814,7 +1822,9 @@ export const updateGalleryImages_fn = async (
     for (const dbImg of galleryImagesInDb) {
       if (!remainingGallery.includes(dbImg.IMAGE_PATH)) {
         await deleteFromGCS(dbImg.IMAGE_PATH);
-        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [dbImg.DORM_IMG_ID]);
+        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [
+          dbImg.DORM_IMG_ID,
+        ]);
       }
     }
   }
@@ -2577,12 +2587,15 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     ST_Y(d.COORDINATES) as lng, 
                     COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                     d.DORM_STATUS_ID,
-                    ds.DORM_STATUS_NAME
+                    ds.DORM_STATUS_NAME,
+                    d.DORM_TYPE_ID,
+                    dt.DORM_TYPE_NAME
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
                 LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
                 LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+                LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
                 WHERE d.DORM_STATUS_ID in (1, 3)
 
             `;
