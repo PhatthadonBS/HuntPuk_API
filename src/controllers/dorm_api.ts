@@ -213,6 +213,8 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         ds.DORM_STATUS_NAME,
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
+        ST_X(d.COORDINATES) AS LAT,
+        ST_Y(d.COORDINATES) AS LNG,
         
         dz.ZONE_NAME,
         COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
@@ -263,6 +265,8 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         d.REQ_STATUS,
+        ST_X(d.COORDINATES) AS LAT,
+        ST_Y(d.COORDINATES) AS LNG,
         
         dz.ZONE_NAME,
         COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
