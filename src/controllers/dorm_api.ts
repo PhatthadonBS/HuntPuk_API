@@ -263,8 +263,12 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         d.REQ_STATUS,
-        
+        d.SCORE,
+        d.ZONE_ID,
         dz.ZONE_NAME,
+        d.WATER_UNIT,
+        d.WATER_LUMP,
+        d.ELECT_UNIT,
         COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
 
         do.FIRST_NAME,
@@ -897,7 +901,10 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
   const dormId = Number(id);
   const files = req.files as MulterFiles;
 
-  if ((!files || Object.keys(files).length === 0) && !req.body.remainingGallery) {
+  if (
+    (!files || Object.keys(files).length === 0) &&
+    !req.body.remainingGallery
+  ) {
     return res
       .status(400)
       .json({ success: false, message: "ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด" });
@@ -2081,7 +2088,11 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     d.REQ_STATUS,       
                     d.DORM_STATUS_ID, 
                     ds.DORM_STATUS_NAME, 
+                    d.ZONE_ID,
                     dz.ZONE_NAME,
+                    d.WATER_UNIT,
+                    d.WATER_LUMP,
+                    d.ELECT_UNIT,
                     COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) AS start_price 
                 FROM DORMITORIES d
                 JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
@@ -2379,9 +2390,20 @@ export const getPendingDormReq_api = async (req: Request, res: Response) => {
         d.DORM_LICENSE,
         d.REQ_STATUS,
         d.DORM_STATUS_ID,
-        
+        d.SCORE,
+        d.ZONE_ID,
         dz.ZONE_NAME,
+        d.WATER_UNIT,
+        d.WATER_LUMP,
+        d.ELECT_UNIT,
         dt.DORM_TYPE_NAME,
+        (
+          SELECT COALESCE(MIN(rp.PRICE), 0)
+          FROM DORM_ROOMS dr
+          JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+          WHERE dr.DORM_ID = d.DORM_ID 
+          AND rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1)
+        ) AS start_price,
         
         do.DORM_OWNER_ID,
         do.FIRST_NAME,
@@ -2563,6 +2585,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       radius,
       score,
       maxWater,
+      maxWaterLump,
       maxElect,
       sortByPrice,
     } = req.query;
@@ -2633,8 +2656,21 @@ export const getAllDormMB = async (req: Request, res: Response) => {
     ) {
       const maxWNum = Number(maxWater);
       if (!isNaN(maxWNum)) {
-        sql += ` AND d.WATER_UNIT <= ? `;
-        params.push(maxWNum, maxWNum);
+        sql += ` AND (d.WATER_UNIT > 0 AND d.WATER_UNIT <= ?) `;
+        params.push(maxWNum);
+      }
+    }
+
+    if (
+      maxWaterLump &&
+      maxWaterLump !== "" &&
+      maxWaterLump !== "null" &&
+      maxWaterLump !== "undefined"
+    ) {
+      const maxWLumpNum = Number(maxWaterLump);
+      if (!isNaN(maxWLumpNum)) {
+        sql += ` AND (d.WATER_LUMP > 0 AND d.WATER_LUMP <= ?) `;
+        params.push(maxWLumpNum);
       }
     }
 
@@ -2646,7 +2682,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
     ) {
       const maxENum = Number(maxElect);
       if (!isNaN(maxENum)) {
-        sql += ` AND d.ELECT_UNIT <= ? `;
+        sql += ` AND (d.ELECT_UNIT = 0 OR d.ELECT_UNIT <= ?) `;
         params.push(maxENum);
       }
     }
