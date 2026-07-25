@@ -61,6 +61,16 @@ export const OTP_Sender_Reg_api = async (req: Request, res: Response) => {
 export const OTP_Sender_Reset_api = async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
+    const [resUser] = await dbcon.query<RowDataPacket[]>(
+      "SELECT USER_ID FROM USERS WHERE EMAIL = ? LIMIT 1",
+      [email.toString().trim()],
+    );
+    if (resUser.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบอีเมลนี้ในระบบ",
+      });
+    }
     const res1 = await OTP_Sender_Reset_fn(email);
     res.status(200).json({ success: res1 });
   } catch (error) {
@@ -126,13 +136,13 @@ export const registerSec1 = async (req: Request, res: Response) => {
     if (dupEmail[0]!["COUNT"] > 0) {
       return res
         .status(400)
-        .json({ success: false, message: "Email นี้ถูกใช้งานแล้ว" });
+        .json({ success: false, message: "อีเมลนี้ถูกใช้งานแล้ว" });
     }
 
     if (dupPhone[0]!["COUNT"] > 0) {
       return res
         .status(400)
-        .json({ success: false, message: "เบอร์โทร นี้ถูกใช้งานแล้ว" });
+        .json({ success: false, message: "เบอร์โทรนี้ถูกใช้งานแล้ว" });
     }
     const hashPassword = await bcrypt.hash(password.toString().trim(), 10);
     const data = {
@@ -173,7 +183,7 @@ export const registerSec2 = async (req: Request, res: Response) => {
   const conn = await dbcon.getConnection();
   try {
     if (verStatus || admin) {
-      const roleId = admin && userData["role"] === 'owner' ? 2 : 1;
+      const roleId = admin && userData["role"] === "owner" ? 2 : 1;
 
       conn.beginTransaction();
       const [rows] = await conn.execute<ResultSetHeader>(
@@ -185,7 +195,7 @@ export const registerSec2 = async (req: Request, res: Response) => {
       if (rows.affectedRows > 0) {
         return res.status(201).json({
           message: "สมัครสมาชิกสำเร็จ",
-          user_id: rows.insertId
+          user_id: rows.insertId,
         });
       } else {
         return res.status(400).json({ message: "สมัครสมาชิกไม่สำเร็จ" });
@@ -374,7 +384,17 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
 //ดึงข้อมูลมา ถ้าไม่อันไหนไม่update ให้เอาข้อมูลเก่ายัดใส่แทน (!!!ยัดข้อมูลเก่าตั้งแต่ front เด้อค่อยส่งมา!!!)
 export const updateUser_api = async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { username, phone_number, first_name, last_name, facebook, line, instagram, x, telegram } = req.body;
+  const {
+    username,
+    phone_number,
+    first_name,
+    last_name,
+    facebook,
+    line,
+    instagram,
+    x,
+    telegram,
+  } = req.body;
   const file = req.file;
 
   const conn = await dbcon.getConnection();
@@ -430,11 +450,26 @@ export const updateUser_api = async (req: Request, res: Response) => {
       const ownerParams: any[] = [first_name, last_name];
 
       // อัปเดต social media fields ถ้ามีส่งมา
-      if (facebook !== undefined) { updateOwnerSql += ", FACEBOOK = ?"; ownerParams.push(facebook || null); }
-      if (line !== undefined) { updateOwnerSql += ", LINE = ?"; ownerParams.push(line || null); }
-      if (instagram !== undefined) { updateOwnerSql += ", INSTAGRAM = ?"; ownerParams.push(instagram || null); }
-      if (x !== undefined) { updateOwnerSql += ", X = ?"; ownerParams.push(x || null); }
-      if (telegram !== undefined) { updateOwnerSql += ", TELEGRAM = ?"; ownerParams.push(telegram || null); }
+      if (facebook !== undefined) {
+        updateOwnerSql += ", FACEBOOK = ?";
+        ownerParams.push(facebook || null);
+      }
+      if (line !== undefined) {
+        updateOwnerSql += ", LINE = ?";
+        ownerParams.push(line || null);
+      }
+      if (instagram !== undefined) {
+        updateOwnerSql += ", INSTAGRAM = ?";
+        ownerParams.push(instagram || null);
+      }
+      if (x !== undefined) {
+        updateOwnerSql += ", X = ?";
+        ownerParams.push(x || null);
+      }
+      if (telegram !== undefined) {
+        updateOwnerSql += ", TELEGRAM = ?";
+        ownerParams.push(telegram || null);
+      }
 
       if (file) {
         if (existingOwner.length > 0 && existingOwner[0]?.PROFILE_IMAGE) {
@@ -704,12 +739,16 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     let user = users.find((u) => u.USER_ID == Number(user_id));
 
     if (isAdmin && email) {
-      const foundUser = users.find((u) => u.EMAIL?.toLowerCase() === email.toString().trim().toLowerCase());
+      const foundUser = users.find(
+        (u) => u.EMAIL?.toLowerCase() === email.toString().trim().toLowerCase(),
+      );
       if (foundUser) {
         user_id = foundUser.USER_ID;
         user = foundUser;
       } else {
-        return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ (ไม่พบอีเมล)" });
+        return res
+          .status(404)
+          .json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ (ไม่พบอีเมล)" });
       }
     }
 
@@ -856,7 +895,12 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     await conn.beginTransaction();
 
     // 3. เรียกฟังก์ชัน Insert ลง DB
-    const result = await requestDormOwner_fn(conn, userData, publicUrl, reqStatus);
+    const result = await requestDormOwner_fn(
+      conn,
+      userData,
+      publicUrl,
+      reqStatus,
+    );
 
     if (isAdmin) {
       // Auto-approve: update the target user's role to 2 (owner) in the database immediately
