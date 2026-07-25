@@ -40,6 +40,8 @@ export const getAllDorms = async (req: Request, res: Response) => {
       radius,
       minScore,
       maxWater,
+      maxWaterUnit,
+      maxWaterLump,
       maxElect,
     } = req.query;
 
@@ -92,10 +94,15 @@ export const getAllDorms = async (req: Request, res: Response) => {
       queryParams.push(Number(minScore));
     }
 
-    // 💧 4. ค้นหาด้วยค่าน้ำต่อหน่วย/แบบเหมา สูงสุดที่ไม่เกินกำหนด
-    if (maxWater) {
-      sql += ` AND (d.WATER_UNIT <= ? OR d.WATER_LUMP <= ?)`;
-      queryParams.push(Number(maxWater), Number(maxWater));
+    // 💧 4. ค้นหาด้วยค่าน้ำ - แยกแบบรายหน่วย / แบบเหมา
+    const effectiveMaxWaterUnit = maxWaterUnit || maxWater; // backward compat
+    if (effectiveMaxWaterUnit) {
+      sql += ` AND (d.WATER_UNIT > 0 AND d.WATER_UNIT <= ?)`;
+      queryParams.push(Number(effectiveMaxWaterUnit));
+    }
+    if (maxWaterLump) {
+      sql += ` AND (d.WATER_LUMP > 0 AND d.WATER_LUMP <= ?)`;
+      queryParams.push(Number(maxWaterLump));
     }
 
     // ⚡ 5. ค้นหาด้วยค่าไฟต่อหน่วย สูงสุดที่ไม่เกินกำหนด
