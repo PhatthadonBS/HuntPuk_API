@@ -71,6 +71,7 @@ export const OTP_Sender_Reset_api = async (req: Request, res: Response) => {
         message: "ไม่พบอีเมลนี้ในระบบ",
       });
     }
+
     const res1 = await OTP_Sender_Reset_fn(email);
     res.status(200).json({ success: res1 });
   } catch (error) {
