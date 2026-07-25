@@ -175,3 +175,49 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const getDormViewsStats_api = async (req: Request, res: Response) => {
+  const dormId = req.params.id;
+  if (!dormId) return res.status(400).json({ success: false, message: "Missing dorm ID" });
+
+  try {
+    const [historicalViewsPerMonth] = await dbcon.execute<RowDataPacket[]>(
+      `SELECT YEAR, MONTH, SUM(VIEW_COUNT) as count
+       FROM STATISTIC_WEB_VIEW
+       WHERE DORM_ID = ?
+       GROUP BY YEAR, MONTH
+       ORDER BY YEAR ASC, MONTH ASC`,
+       [dormId]
+    );
+    const [liveViewsPerMonth] = await dbcon.execute<RowDataPacket[]>(
+      `SELECT YEAR(VIEW_AT) as YEAR, MONTH(VIEW_AT) as MONTH, COUNT(LOG_ID) as count
+       FROM WEB_VIEW_LOGS
+       WHERE DORM_ID = ?
+       GROUP BY YEAR(VIEW_AT), MONTH(VIEW_AT)`,
+       [dormId]
+    );
+
+    const viewsMap = new Map<string, number>();
+    historicalViewsPerMonth.forEach((row: any) => {
+      const key = `${row.YEAR}-${row.MONTH}`;
+      viewsMap.set(key, Number(row.count) || 0);
+    });
+    liveViewsPerMonth.forEach((row: any) => {
+      if (row.YEAR && row.MONTH) {
+        const key = `${row.YEAR}-${row.MONTH}`;
+        const existing = viewsMap.get(key) || 0;
+        viewsMap.set(key, existing + (Number(row.count) || 0));
+      }
+    });
+
+    const viewsPerMonthBreakdown = Array.from(viewsMap.entries()).map(([key, count]) => {
+      const [year, month] = key.split('-');
+      return { year: Number(year), month: Number(month), count };
+    }).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+
+    return res.status(200).json({ success: true, data: viewsPerMonthBreakdown });
+  } catch (error) {
+    console.error("Dorm View Stats Error:", error);
+    return res.status(500).json({ success: false, message: "Error loading dorm view stats." });
+  }
+};

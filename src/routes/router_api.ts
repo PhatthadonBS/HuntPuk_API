@@ -24,6 +24,7 @@ router.post('/api/views/dorm/:id', viewController.recordDormView);
 
 // Dashboard Routes
 router.get('/api/dashboard/stats', dashboardController.getDashboardStats_api);
+router.get('/api/dashboard/dorm-views/:id', dashboardController.getDormViewsStats_api);
 
 
 const strictLimiter = rateLimit({
