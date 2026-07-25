@@ -1483,6 +1483,18 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       }
     }
 
+    // Handle Custom Facility Image (if applicable)
+    const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
+    if (facIconUrl) {
+      const reqUserId = (req as any).user?.id || ownerRows[0]?.USER_ID;
+      if (reqUserId) {
+        await conn.execute(
+          "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND (FAC_TYPE_ICON IS NULL OR FAC_TYPE_ICON = '') ORDER BY FAC_TYPE_ID DESC LIMIT 1",
+          [facIconUrl, reqUserId],
+        );
+      }
+    }
+
     if (Object.keys(uploadedUrls).length > 0 || body.remaining_gallery) {
       if (Object.keys(uploadedUrls).length > 0) {
         await updateRoomComponentImages_fn(dormId, uploadedUrls, conn);
@@ -2237,6 +2249,12 @@ export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
 export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
+    const sortBy = req.query.sortBy === 'views' ? 'views' : 'score';
+
+    let orderClause = 'ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC';
+    if (sortBy === 'views') {
+      orderClause = 'ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC';
+    }
 
     const sql = `
               SELECT 
@@ -2256,7 +2274,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
               WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID IN (1, 3)
               GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID
-              ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC
+              ${orderClause}
               LIMIT ?
     `;
 

@@ -19,7 +19,7 @@ export async function processAndUploadImages(
   ownerId: number
 ): Promise<Record<string, string | string[]>> {
   
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"]; // Accept webp from frontend if they already convert, but we will convert to webp anyway for consistency and optimization.
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
   const uploadedUrls: Record<string, string | string[]> = {};
   
   // Create base path: dorms/{dormId}_u{ownerId}/
@@ -38,7 +38,7 @@ export async function processAndUploadImages(
 
       // 1. Validation
       if (!allowedMimeTypes.includes(file.mimetype)) {
-         throw new Error(`ข้อผิดพลาด: ไฟล์ ${file.originalname} เป็นประเภทที่ไม่รองรับ (รองรับเฉพาะ JPEG และ PNG) แล้วจะแปลงเป็น WebP ให้อัตโนมัติ`);
+         throw new Error(`ข้อผิดพลาด: ไฟล์ ${file.originalname} เป็นประเภทที่ไม่รองรับ (รองรับเฉพาะ JPEG, PNG, WEBP, SVG)`);
       }
 
       // 2. Naming
@@ -46,11 +46,11 @@ export async function processAndUploadImages(
       let newFileName = "";
       
       if (fieldname === "OTHER_IMG") {
-        newFileName = `other_${index}_${timestamp}.webp`;
+        newFileName = `other_${index}_${timestamp}.${file.mimetype === 'image/svg+xml' ? 'svg' : 'webp'}`;
       } else {
         // e.g. FRONT_DORM_IMG -> front_dorm
         const baseName = fieldname.toLowerCase().replace("_img", "");
-        newFileName = `${baseName}_${timestamp}.webp`;
+        newFileName = `${baseName}_${timestamp}.${file.mimetype === 'image/svg+xml' ? 'svg' : 'webp'}`;
       }
 
       const fullPath = `${basePath}/${newFileName}`;
@@ -60,7 +60,7 @@ export async function processAndUploadImages(
       const uploadPromise = new Promise<void>((resolve, reject) => {
         const blobStream = blob.createWriteStream({
           resumable: false,
-          contentType: "image/webp", // We are converting to webp
+          contentType: file.mimetype === 'image/svg+xml' ? "image/svg+xml" : "image/webp",
         });
 
         blobStream.on("error", (err) => {
@@ -76,15 +76,20 @@ export async function processAndUploadImages(
           resolve();
         });
 
-        // Pipe: Buffer -> Sharp -> GCS Stream
-        sharp(file.buffer)
-          .resize({ width: 1200, withoutEnlargement: true }) // Max width 1200px
-          .webp({ quality: 80 }) // Convert to WebP, 80% quality
-          .pipe(blobStream)
-          .on("error", (err: any) => {
-             console.error(`Sharp Processing Error for ${file.originalname}:`, err);
-             reject(err);
-          });
+        if (file.mimetype === 'image/svg+xml') {
+          // Skip sharp for SVG to preserve vector quality
+          blobStream.end(file.buffer);
+        } else {
+          // Pipe: Buffer -> Sharp -> GCS Stream
+          sharp(file.buffer)
+            .resize({ width: 1200, withoutEnlargement: true }) // Max width 1200px
+            .webp({ quality: 80 }) // Convert to WebP, 80% quality
+            .pipe(blobStream)
+            .on("error", (err: any) => {
+               console.error(`Sharp Processing Error for ${file.originalname}:`, err);
+               reject(err);
+            });
+        }
       });
 
       uploadPromises.push(uploadPromise);
@@ -121,9 +126,9 @@ export async function fileUpload(
     subFolder: string | null,
     fileOf: string
   ) {
-    const allowed = ["image/jpeg", "image/png", "image/webp"]; // Added webp here just in case frontend already sends it
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
     if (!allowed.includes(file.mimetype)) {
-      throw new Error("ข้อผิดพลาด: ประเภทไฟล์ไม่ถูกต้อง (รองรับเฉพาะ JPEG, PNG, WEBP)");
+      throw new Error("ข้อผิดพลาด: ประเภทไฟล์ไม่ถูกต้อง (รองรับเฉพาะ JPEG, PNG, WEBP, SVG)");
     }
   
     if (mainFolder !== "users" && mainFolder !== "dorms") {
@@ -144,7 +149,7 @@ export async function fileUpload(
       
       // Determine final filename
       const timestamp = Date.now();
-      const newFileName = `${fileOf}_${timestamp}.webp`;
+      const newFileName = `${fileOf}_${timestamp}.${file.mimetype === 'image/svg+xml' ? 'svg' : 'webp'}`;
       
       const pathParts = [mainFolder, folderName, subFolder]
         .filter((p) => p)
@@ -155,7 +160,7 @@ export async function fileUpload(
   
       const blobStream = blob.createWriteStream({
         resumable: false,
-        contentType: "image/webp", 
+        contentType: file.mimetype === 'image/svg+xml' ? "image/svg+xml" : "image/webp", 
       });
   
       blobStream.on("error", (err: any) => {
@@ -169,14 +174,18 @@ export async function fileUpload(
         resolve(publicUrl);
       });
   
-      // Use sharp here too for consistency across the app, even for single uploads like profile pics
-      sharp(file.buffer)
-          .resize({ width: 1200, withoutEnlargement: true }) 
-          .webp({ quality: 80 }) 
-          .pipe(blobStream)
-          .on("error", (err: any) => {
-             rejects(err);
-          });
+      if (file.mimetype === 'image/svg+xml') {
+        blobStream.end(file.buffer);
+      } else {
+        // Use sharp here too for consistency across the app, even for single uploads like profile pics
+        sharp(file.buffer)
+            .resize({ width: 1200, withoutEnlargement: true }) 
+            .webp({ quality: 80 }) 
+            .pipe(blobStream)
+            .on("error", (err: any) => {
+               rejects(err);
+            });
+      }
     });
   }
 
