@@ -134,6 +134,17 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
       return { year: Number(year), month: Number(month), count };
     }).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
 
+    const [ownersWithDormsResult] = await dbcon.execute<RowDataPacket[]>(
+      `SELECT do.USER_ID as userId, do.FIRST_NAME as firstName, do.LAST_NAME as lastName, u.EMAIL as email, do.PROFILE_IMAGE as profileImage, COUNT(d.DORM_ID) as registeredDormsCount
+       FROM DORM_OWNERS do
+       JOIN USERS u ON do.USER_ID = u.USER_ID
+       JOIN DORMITORIES d ON do.DORM_OWNER_ID = d.DORM_OWNER_ID
+       WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
+       GROUP BY do.USER_ID, do.FIRST_NAME, do.LAST_NAME, u.EMAIL, do.PROFILE_IMAGE
+       ORDER BY registeredDormsCount DESC`
+    );
+    const ownersWithDorms = ownersWithDormsResult || [];
+
     return res.status(200).json({
       success: true,
       data: {
@@ -147,6 +158,7 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
         topPopularDorms,
         allDormViews,
         totalDormViews,
+        ownersWithDorms,
         zoneBreakdown: zoneBreakdown || [],
         dormStatusBreakdown: dormStatusBreakdown || [],
         dormTypeBreakdown: dormTypeBreakdown || [],
