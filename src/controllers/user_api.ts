@@ -732,13 +732,15 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       instagram,
       telegram,
       override,
+      phone_number,
+      phone,
     } = req.body;
 
     const file = req.file;
+    const inputPhone = phone_number || phone;
 
     const users = await getUsers_fn();
     let user = users.find((u) => u.USER_ID == Number(user_id));
-
     if (isAdmin && email) {
       const foundUser = users.find(
         (u) => u.EMAIL?.toLowerCase() === email.toString().trim().toLowerCase(),
@@ -755,6 +757,21 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
 
     if (!user)
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
+
+    if (inputPhone) {
+      const phone_format = /^0[0-9]{9}$/;
+      if (!phone_format.test(inputPhone)) {
+        return res.status(400).json({ message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
+      }
+
+      const [dupRows] = await conn.execute<RowDataPacket[]>(
+        "SELECT USER_ID FROM USERS WHERE PHONE_NUMBER = ? AND USER_ID != ?",
+        [inputPhone, user.USER_ID],
+      );
+      if (dupRows.length > 0) {
+        return res.status(409).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
+      }
+    }
 
     // Check if user already has an entry in DORM_OWNERS
     const [owner] = await conn.execute<DormOwnerGetRes[]>(
@@ -822,7 +839,16 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
             updateParams,
           );
 
-          if (updateRes.affectedRows > 0) {
+          let phoneUpdated = false;
+          if (inputPhone) {
+            const [phoneRes] = await conn.execute<ResultSetHeader>(
+              "UPDATE USERS SET PHONE_NUMBER = ? WHERE USER_ID = ?",
+              [inputPhone, user.USER_ID],
+            );
+            if (phoneRes.affectedRows > 0) phoneUpdated = true;
+          }
+
+          if (updateRes.affectedRows > 0 || phoneUpdated) {
             return res.status(200).json({
               success: true,
               message: "อัปเดตคำขอเรียบร้อยแล้ว",
@@ -845,6 +871,12 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
             });
           } else if (existingOwner.REQ_STATUS == 2 && !file) {
             // For rejected status, if they just want to resubmit without new file, we can do it here
+            if (inputPhone) {
+              await conn.execute(
+                "UPDATE USERS SET PHONE_NUMBER = ? WHERE USER_ID = ?",
+                [inputPhone, user.USER_ID],
+              );
+            }
             const [reqRes] = await conn.execute<ResultSetHeader>(
               "UPDATE DORM_OWNERS SET REQ_STATUS = 0 WHERE USER_ID = ?",
               [user_id],
@@ -903,6 +935,13 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
       reqStatus,
     );
 
+    if (inputPhone) {
+      await conn.execute(
+        "UPDATE USERS SET PHONE_NUMBER = ? WHERE USER_ID = ?;",
+        [inputPhone, userData.user_id],
+      );
+    }
+
     if (isAdmin) {
       // Auto-approve: update the target user's role to 2 (owner) in the database immediately
       await conn.execute(
@@ -935,6 +974,12 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
     console.error("Request Owner Error:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
+      if (error.sqlMessage && error.sqlMessage.includes("USERS.PHONE_NUMBER")) {
+        return res.status(409).json({
+          success: false,
+          message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว",
+        });
+      }
       return res.status(409).json({
         success: false,
         message: "คุณได้ส่งคำขอไปแล้ว หรือเป็นเจ้าของหอพักอยู่แล้ว",
