@@ -2637,7 +2637,10 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     d.DORM_STATUS_ID,
                     ds.DORM_STATUS_NAME,
                     d.DORM_TYPE_ID,
-                    dt.DORM_TYPE_NAME
+                    dt.DORM_TYPE_NAME,
+                    d.WATER_UNIT,
+                    d.WATER_LUMP,
+                    d.ELECT_UNIT
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -2733,7 +2736,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       }
     }
 
-    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME `;
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT `;
 
     const havingClauses = [];
     if (
