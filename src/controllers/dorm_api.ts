@@ -2227,7 +2227,7 @@ export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
 
       FROM DORM_OWNERS do
       JOIN USERS u ON do.USER_ID = u.USER_ID
-      WHERE 1=1
+      WHERE u.ROLE_TYPE_ID != 3
     `;
 
     const params: any[] = [];
@@ -2267,11 +2267,12 @@ export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
 export const getPopularDorms_api = async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 6;
-    const sortBy = req.query.sortBy === 'views' ? 'views' : 'score';
+    const sortBy = req.query.sortBy === "views" ? "views" : "score";
 
-    let orderClause = 'ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC';
-    if (sortBy === 'views') {
-      orderClause = 'ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC';
+    let orderClause =
+      "ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC";
+    if (sortBy === "views") {
+      orderClause = "ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC";
     }
 
     const sql = `
