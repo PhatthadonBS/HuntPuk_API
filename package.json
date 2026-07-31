@@ -22,11 +22,13 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.11.0",
     "multer": "^2.0.2",
     "mysql2": "^3.14.4",
     "node-cron": "^4.4.1",
     "nodemailer": "^8.0.6",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -34,6 +36,7 @@
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
     "@types/multer": "^2.0.0",
     "@types/mysql": "^2.15.27",
     "@types/node": "^24.3.0",

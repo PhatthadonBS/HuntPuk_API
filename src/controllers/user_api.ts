@@ -2,22 +2,26 @@
 import { Request, Response } from "express";
 import { dbcon } from "../database/pool";
 import bcrypt from "bcrypt";
-import { format, QueryResult, ResultSetHeader, RowDataPacket } from "mysql2";
+import { ResultSetHeader, RowDataPacket } from "mysql2";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import axios from "axios";
 import { PoolConnection } from "mysql2/promise";
 import { fileUpload, deleteFromGCS } from "../controllers/uploads";
 import {
-  OtpVerifyPostRes,
-  UserRegPostReq,
-  UserDataPostRes,
-  UserAllGetRes,
-  UserDormOwnerReqPostReq,
-  DTOUserDormOwnerReqGetRes,
   UserLoggedInPostRes,
+  UserDormOwnerReqPostReq,
+  UserAllGetRes,
+  UserDataPostRes,
+  UserRegPostReq,
+  OtpVerifyPostRes,
 } from "../models/user.model";
 import { DormOwnerGetRes } from "../models/dorm.model";
+import {
+  registerSec1Schema,
+  loginSchema,
+} from "../validations/auth.validation";
+import { DTOUserDormOwnerReqGetRes } from "../models/user.model";
 
 dotenv.config();
 
@@ -44,7 +48,8 @@ export const OTP_Verify_api = async (req: Request, res: Response) => {
         .json({ status: verify.status, email: verify.email, msg: verify.msg });
     }
   } catch (error) {
-    res.status(401).json({ error: error });
+    console.error(error);
+    res.status(401).json({ message: "เกิดข้อผิดพลาด" });
   }
 };
 
@@ -54,7 +59,8 @@ export const OTP_Sender_Reg_api = async (req: Request, res: Response) => {
     const res1 = await OTP_Sender_Reg_fn(email);
     res.status(200).json({ success: res1 });
   } catch (error) {
-    res.status(400).json({ success: false, message: error });
+    console.error(error);
+    res.status(400).json({ success: false, message: "เกิดข้อผิดพลาด" });
   }
 };
 
@@ -75,7 +81,8 @@ export const OTP_Sender_Reset_api = async (req: Request, res: Response) => {
     const res1 = await OTP_Sender_Reset_fn(email);
     res.status(200).json({ success: res1 });
   } catch (error) {
-    res.status(400).json({ success: false, message: error });
+    console.error(error);
+    res.status(400).json({ success: false, message: "เกิดข้อผิดพลาด" });
   }
 };
 
@@ -85,7 +92,8 @@ export const OTP_Sender_api = async (req: Request, res: Response) => {
     const res1 = await OTP_Sender_fn(email);
     res.status(200).json({ success: res1 });
   } catch (error) {
-    res.status(400).json({ success: false, message: error });
+    console.error(error);
+    res.status(400).json({ success: false, message: "เกิดข้อผิดพลาด" });
   }
 };
 
@@ -99,28 +107,27 @@ export const resMailSender_api = async (req: Request, res: Response) => {
     );
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(400).json({ success: false, message: error });
+    console.error(error);
+    res.status(400).json({ success: false, message: "เกิดข้อผิดพลาด" });
   }
 };
 
 ///////////////////////////////////  About Mail --End--  ////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////   About Authen --Begin--  ////////////////////////////////////////////////////////////////
+////////////////////////////////   About Authen --Begin--  ////////////////////////////////////////////////////////////////
 
 export const registerSec1 = async (req: Request, res: Response) => {
-  const { username, email, password, phone } = req.body;
-
-  const phone_format = /^0[0-9]{9}$/;
-
-  if (!phone_format.test(phone)) {
-    return res.status(400).json({ message: "รูปเบอร์โทรไม่ถูกต้อง" });
+  const validationResult = registerSec1Schema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res
+      .status(400)
+      .json({
+        message: "ข้อมูลไม่ถูกต้อง",
+        errors: validationResult.error.errors,
+      });
   }
 
-  const emailRegex = /^[a-z0-9._%+-]+@([a-z0-9-]+\.)+[a-z]{2,}$/i;
-
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ message: "รูปเบอร์อีเมลไม่ถูกต้อง" });
-  }
+  const { username, email, password, phone } = validationResult.data;
 
   const conn = await dbcon.getConnection();
   try {
@@ -154,7 +161,8 @@ export const registerSec1 = async (req: Request, res: Response) => {
     };
     res.status(200).json(data);
   } catch (error) {
-    res.status(500).json({ success: false, message: error });
+    console.error(error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาด" });
   } finally {
     conn.release();
   }
@@ -176,15 +184,18 @@ export const registerSec2 = async (req: Request, res: Response) => {
     return res.status(400).json("สมัครสมาชิกไม่สำเร็จ :C");
   const verStatus = verify;
 
-  if (!verStatus && !admin) {
+  // Validate admin flag using req.user (from verifyToken) if admin is true
+  const isAdminRequest = admin && (req as any).user?.role === 3;
+
+  if (!verStatus && !isAdminRequest) {
     return res.status(400).json({
       message: "ยังไม่ยืนยัน OTP",
     });
   }
   const conn = await dbcon.getConnection();
   try {
-    if (verStatus || admin) {
-      const roleId = admin && userData["role"] === "owner" ? 2 : 1;
+    if (verStatus || isAdminRequest) {
+      const roleId = isAdminRequest && userData["role"] === "owner" ? 2 : 1;
 
       conn.beginTransaction();
       const [rows] = await conn.execute<ResultSetHeader>(
@@ -206,14 +217,24 @@ export const registerSec2 = async (req: Request, res: Response) => {
     }
   } catch (error) {
     conn.rollback();
-    res.status(400).json(error);
+    console.error(error);
+    res.status(400).json({ message: "เกิดข้อผิดพลาด" });
   } finally {
     conn.release();
   }
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const validationResult = loginSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res
+      .status(400)
+      .json({
+        message: "ข้อมูลไม่ถูกต้อง",
+        errors: validationResult.error.errors,
+      });
+  }
+  const { email, password } = validationResult.data;
   const conn = await dbcon.getConnection();
   try {
     const [user] = await conn.query<UserDataPostRes[]>(
@@ -253,7 +274,7 @@ export const login = async (req: Request, res: Response) => {
         status: user[0].ACCOUNT_STATUS,
       }, // Payload
       jwtSecret,
-      { expiresIn: "30d" },
+      { expiresIn: "7d" },
     );
 
     res.json({
@@ -311,7 +332,8 @@ export const resetPassword_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     await conn.rollback();
-    return res.status(400).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(400).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   } finally {
     conn.release();
   }
@@ -331,7 +353,8 @@ export const getUsers_api = async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
   } catch (error) {
-    return res.status(400).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(400).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -348,14 +371,20 @@ export const getUser_api = async (req: Request, res: Response) => {
       return res.status(404).json("ไม่มีข้อมูลผู้ใช้นี้ในระบบ");
     }
   } catch (error) {
-    res.status(400).json(error);
+    console.error(error);
+    res.status(400).json({ message: "เกิดข้อผิดพลาด" });
   }
 };
 
 export const getMembers_api = async (req: Request, res: Response) => {
   try {
-    const users = await getUsers_fn();
-    const members = users.filter((member) => member.ROLE_TYPE_ID == 1);
+    const [members] = await dbcon.execute<UserAllGetRes[]>(
+      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, 
+              DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE 
+       FROM USERS U 
+       LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID 
+       WHERE U.ROLE_TYPE_ID = 1`,
+    );
 
     if (members.length > 0) {
       return res.status(200).json(members);
@@ -363,14 +392,19 @@ export const getMembers_api = async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
   } catch (error) {
-    res.status(400).json(error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
 export const getDormOwners_api = async (req: Request, res: Response) => {
   try {
-    const users = await getUsers_fn();
-    const dormOwners = users.filter((member) => member.ROLE_TYPE_ID == 2);
+    const [dormOwners] = await dbcon.execute<UserAllGetRes[]>(
+      `SELECT U.USER_ID, U.USERNAME, U.EMAIL, U.PHONE_NUMBER, U.ROLE_TYPE_ID, U.ACCOUNT_STATUS, 
+              DO.FIRST_NAME, DO.LAST_NAME, DO.PROFILE_IMAGE 
+       FROM USERS U 
+       LEFT JOIN DORM_OWNERS DO ON U.USER_ID = DO.USER_ID 
+       WHERE U.ROLE_TYPE_ID = 2`,
+    );
 
     if (dormOwners.length > 0) {
       return res.status(200).json(dormOwners);
@@ -378,7 +412,7 @@ export const getDormOwners_api = async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
   } catch (error) {
-    res.status(400).json(error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -525,9 +559,8 @@ export const updateUser_api = async (req: Request, res: Response) => {
       }
       return res.status(400).json({ message: "ข้อมูลซ้ำซ้อนในระบบ" });
     }
-    return res
-      .status(500)
-      .json({ message: "อัปเดตข้อมูลผู้ใช้ไม่สำเร็จ", error });
+    console.error(error);
+    return res.status(500).json({ message: "อัปเดตข้อมูลผู้ใช้ไม่สำเร็จ" });
   } finally {
     conn.release();
   }
@@ -551,7 +584,8 @@ export const deleteAccount_api = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
   } catch (error) {
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -585,7 +619,8 @@ export const hardDeleteAccount_api = async (req: Request, res: Response) => {
         error,
       });
     }
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -603,7 +638,8 @@ export const banAccount_api = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
   } catch (error) {
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -623,7 +659,8 @@ export const unbanAccount_api = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
   } catch (error) {
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -653,7 +690,8 @@ export const recoverAccount_api = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
   } catch (error) {
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -686,7 +724,8 @@ export const addFavorite_api = async (req: Request, res: Response) => {
     }
 
     console.error(error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -710,7 +749,8 @@ export const removeFavorite_api = async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ", error });
+    console.error(error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 };
 
@@ -769,7 +809,9 @@ export const requestDormOwner_api = async (req: Request, res: Response) => {
         [inputPhone, user.USER_ID],
       );
       if (dupRows.length > 0) {
-        return res.status(409).json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
+        return res
+          .status(409)
+          .json({ message: "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว" });
       }
     }
 

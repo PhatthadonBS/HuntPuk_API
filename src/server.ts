@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import express, { Request, Response, NextFunction } from "express";
 import router from "./routes/router_api";
 import cors from "cors";
+import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { startMonthlyViewSummaryJob } from "./controllers/cron_jobs";
 
@@ -14,10 +15,38 @@ const app = express();
 // 1. Trust proxy if behind a load balancer (common for cloud deploys)
 app.set('trust proxy', 1);
 
+app.use(morgan('dev'));
+
 // 2. CORS Configuration (MUST be before Rate Limiter to handle preflight)
+const allowedOrigins = [
+  "https://huntpuk.space", 
+  "capacitor://localhost", 
+  "http://localhost",
+  "https://localhost"
+];
+
 app.use(
   cors({
-    origin: "*", // Adjust this to specific domains in production
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Allow local development IPs and ports (e.g. 192.168.x.x:8100 or localhost:8100)
+      if (
+        origin.startsWith('http://192.168.') || 
+        origin.startsWith('http://10.') || 
+        origin.startsWith('http://localhost:') || 
+        origin.startsWith('https://localhost:')
+      ) {
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      callback(new Error('Not allowed by CORS'));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
   })

@@ -1,4 +1,3 @@
-import { format } from "mysql2";
 import { storage, bucketName } from "../config/gscConfig";
 import sharp from "sharp";
 import { MulterFiles } from "./dorm_api"; // Ensure this is exported from dorm_api or models
@@ -69,9 +68,7 @@ export async function processAndUploadImages(
         });
 
         blobStream.on("finish", () => {
-          const publicUrl = format(
-            `https://storage.googleapis.com/${bucket.name}/${blob.name}`
-          );
+          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
           urlsForField.push(publicUrl);
           resolve();
         });
@@ -168,9 +165,7 @@ export async function fileUpload(
       });
   
       blobStream.on("finish", async () => {
-        const publicUrl = format(
-          `https://storage.googleapis.com/${bucket.name}/${blob.name}`
-        );
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
         resolve(publicUrl);
       });
   

@@ -48,3 +48,12 @@ export const verifyTokenOptional = (
     next();
   });
 };
+
+export const requireRole = (...roles: number[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+    }
+    next();
+  };
+};
