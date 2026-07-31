@@ -119,12 +119,10 @@ export const resMailSender_api = async (req: Request, res: Response) => {
 export const registerSec1 = async (req: Request, res: Response) => {
   const validationResult = registerSec1Schema.safeParse(req.body);
   if (!validationResult.success) {
-    return res
-      .status(400)
-      .json({
-        message: "ข้อมูลไม่ถูกต้อง",
-        errors: validationResult.error.errors,
-      });
+    return res.status(400).json({
+      message: "ข้อมูลไม่ถูกต้อง",
+      errors: validationResult.error.errors,
+    });
   }
 
   const { username, email, password, phone } = validationResult.data;
@@ -227,12 +225,10 @@ export const registerSec2 = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   const validationResult = loginSchema.safeParse(req.body);
   if (!validationResult.success) {
-    return res
-      .status(400)
-      .json({
-        message: "ข้อมูลไม่ถูกต้อง",
-        errors: validationResult.error.errors,
-      });
+    return res.status(400).json({
+      message: "ข้อมูลไม่ถูกต้อง",
+      errors: validationResult.error.errors,
+    });
   }
   const { email, password } = validationResult.data;
   const conn = await dbcon.getConnection();
@@ -1058,11 +1054,12 @@ export const approveDormOwner = async (req: Request, res: Response) => {
       [status, user_id],
     );
 
-    await conn.execute<ResultSetHeader>(
-      "UPDATE USERS SET ROLE_TYPE_ID = 2 WHERE USER_ID = ?;",
-      [user_id],
-    );
-
+    if (approve_status) {
+      await conn.execute<ResultSetHeader>(
+        "UPDATE USERS SET ROLE_TYPE_ID = 2 WHERE USER_ID = ?;",
+        [user_id],
+      );
+    }
     await conn.commit();
 
     const subject = "รายงานการส่งคำร้องขอสิทธิ์เป็นเจ้าของหอพัก";
