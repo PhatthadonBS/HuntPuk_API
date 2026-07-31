@@ -1,8 +1,9 @@
 import { createClient } from 'redis';
 
-// Connect to the redis service defined in docker-compose.yml
+// Connect to the redis service defined in docker-compose.yml or via ENV (e.g. Render)
+const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
 const redisClient = createClient({
-  url: 'redis://redis:6379'
+  url: redisUrl
 });
 
 redisClient.on('error', (err) => console.log('Redis Client Error', err));
