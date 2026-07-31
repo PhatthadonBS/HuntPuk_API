@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
+    "start:prod": "pm2-runtime start dist/server.js -i max",
     "dev": "nodemon -L --watch src --ext ts --exec ts-node src/server.ts"
   },
   "keywords": [],
@@ -27,6 +28,8 @@
     "mysql2": "^3.14.4",
     "node-cron": "^4.4.1",
     "nodemailer": "^8.0.6",
+    "pm2": "^5.4.3",
+    "redis": "^4.6.14",
     "sharp": "^0.34.5",
     "zod": "^3.25.76"
   },

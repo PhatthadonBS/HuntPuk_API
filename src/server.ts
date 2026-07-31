@@ -6,6 +6,7 @@ import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { startMonthlyViewSummaryJob } from "./controllers/cron_jobs";
+import { connectRedis } from "./config/redis";
 
 dotenv.config();
 
@@ -83,11 +84,15 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // 7. Initialize Cron Jobs
 startMonthlyViewSummaryJob();
 
-const server = http.createServer(app);
-
-server.listen(port, "0.0.0.0", () => {
-  console.log(`🚀 HuntPuk API started on port ${port}`);
-}).on("error", (error) => {
-  console.error("Server Startup Error:", error);
+// Connect to Redis and start server
+connectRedis().then(() => {
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`🚀 HuntPuk API started on port ${port}`);
+  });
+}).catch(err => {
+  console.error("Failed to connect to Redis:", err);
+  // Fallback to start server without Redis caching
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`🚀 HuntPuk API started on port ${port} (Redis disconnected)`);
+  });
 });
-

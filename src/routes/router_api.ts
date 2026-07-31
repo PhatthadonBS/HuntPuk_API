@@ -11,6 +11,7 @@ import {
   verifyTokenOptional,
   requireRole,
 } from "../middlewares/auth_middleware";
+import { cacheMiddleware } from "../middlewares/cache";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -130,7 +131,7 @@ router.get(
   requireRole(3),
   dormController.getPendingDormReq_api,
 );
-router.get("/api/dorms/zones", dormController.getAllZones);
+router.get("/api/dorms/zones", cacheMiddleware(3600), dormController.getAllZones);
 router.post(
   "/api/dorms/zones",
   verifyToken,
@@ -143,7 +144,7 @@ router.delete(
   requireRole(3),
   dormController.deleteDormZone,
 );
-router.get("/api/dorms/dormTypes", dormController.getAllDormTypes);
+router.get("/api/dorms/dormTypes", cacheMiddleware(3600), dormController.getAllDormTypes);
 router.post(
   "/api/dorms/dormTypes",
   verifyToken,
@@ -156,7 +157,7 @@ router.delete(
   requireRole(3),
   dormController.deleteDormType,
 );
-router.get("/api/dorms/roomTypes", dormController.getAllRoomTypes);
+router.get("/api/dorms/roomTypes", cacheMiddleware(3600), dormController.getAllRoomTypes);
 router.post(
   "/api/dorms/roomTypes",
   verifyToken,
@@ -260,7 +261,7 @@ router.post(
   upload.single("fac"),
   dormController.addFacility_api,
 );
-router.get("/api/dorms/facilities", dormController.getFacilities_api);
+router.get("/api/dorms/facilities", cacheMiddleware(3600), dormController.getFacilities_api);
 router.get(
   "/api/dorms/facilities/pending",
   verifyToken,
