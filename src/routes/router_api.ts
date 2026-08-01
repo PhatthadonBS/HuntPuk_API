@@ -293,7 +293,7 @@ router.put(
 router.put(
   "/api/dorms/changeStatus/:id",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.changeDormStatus_api,
 );
 
