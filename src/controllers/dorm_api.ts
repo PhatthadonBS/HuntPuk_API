@@ -1872,12 +1872,29 @@ export const updateGalleryImages_fn = async (
 
 export const removeDorm_api = async (req: Request, res: Response) => {
   const id = req.params.id as string;
+  const force = req.query.force === "true";
   const conn = await dbcon.getConnection();
   const userRole = (req as any).user?.role;
+  const userId = (req as any).user?.id;
 
   try {
-    if (userRole === 3) {
-      // Admin: Hard Delete
+    if (userRole === 3 || force) {
+      if (userRole !== 3 && force) {
+        const [ownerCheck] = await conn.execute<RowDataPacket[]>(
+          "SELECT DORM_OWNER_ID FROM DORMITORIES WHERE DORM_ID = ?",
+          [id],
+        );
+        if (
+          ownerCheck.length === 0 ||
+          ownerCheck[0]?.DORM_OWNER_ID !== userId
+        ) {
+          return res
+            .status(403)
+            .json({ success: false, message: "ไม่มีสิทธิ์ลบข้อมูลหอพักนี้" });
+        }
+      }
+
+      // Hard Delete
       await conn.beginTransaction();
 
       // ลบตารางที่มี Foreign Key เชื่อมกับ DORM_ROOMS ก่อน
@@ -1924,6 +1941,17 @@ export const removeDorm_api = async (req: Request, res: Response) => {
       });
     } else {
       // Dorm Owner: Soft Delete
+      // Add ownership check for security
+      const [ownerCheck] = await conn.execute<RowDataPacket[]>(
+        "SELECT DORM_OWNER_ID FROM DORMITORIES WHERE DORM_ID = ?",
+        [id],
+      );
+      if (ownerCheck.length === 0 || ownerCheck[0]?.DORM_OWNER_ID !== userId) {
+        return res
+          .status(403)
+          .json({ success: false, message: "ไม่มีสิทธิ์ลบข้อมูลหอพักนี้" });
+      }
+
       const [result] = await conn.execute<ResultSetHeader>(
         "UPDATE DORMITORIES SET DORM_STATUS_ID = 4 WHERE DORM_ID = ?",
         [id],

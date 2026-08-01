@@ -248,7 +248,7 @@ export const login = async (req: Request, res: Response) => {
         .json({ message: "บัญชีผู้ใช้นี้ถูกระงับการใช้งาน" });
     }
 
-    const isMatch = await bcrypt.compare(password, user[0]!.PASSWORD);
+    const isMatch = await bcrypt.compare(password.toString().trim(), user[0]!.PASSWORD);
     if (!isMatch) {
       return res
         .status(401)

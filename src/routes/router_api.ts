@@ -15,7 +15,7 @@ import { cacheMiddleware } from "../middlewares/cache";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 const router = express.Router();
@@ -61,11 +61,7 @@ router.post(
   verifyTokenOptional,
   userController.registerSec2,
 );
-router.put(
-  "/api/user/resetPassword",
-  verifyToken,
-  userController.resetPassword_api,
-);
+router.put("/api/user/resetPassword", userController.resetPassword_api);
 router.get("/api/user/users", verifyToken, userController.getUsers_api);
 router.get("/api/user/members", verifyToken, userController.getMembers_api);
 router.get(
@@ -89,7 +85,7 @@ router.post("/api/user/review", verifyToken, dormController.addReview_api);
 router.get(
   "/api/user/dormOwnerReq",
   verifyToken,
-  requireRole(3),
+  requireRole(1, 2, 3),
   dormController.getPendingOwners_api,
 );
 router.get(
@@ -360,7 +356,7 @@ router.get("/api/dorms/review/:id", dormController.getReviewsByDormId_api);
 router.get(
   "/api/dorms/facility-req-count",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.getFacilityReqCount_api,
 );
 router.get("/api/dorms/:id", dormController.getDormById);
