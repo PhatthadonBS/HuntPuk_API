@@ -21,6 +21,7 @@ app.use(morgan('dev'));
 // 2. CORS Configuration (MUST be before Rate Limiter to handle preflight)
 const allowedOrigins = [
   "https://huntpuk.space", 
+  "https://huntpuk-8c96d.web.app",
   "capacitor://localhost", 
   "http://localhost",
   "https://localhost"
@@ -35,6 +36,7 @@ app.use(
       // Allow local development IPs and ports (e.g. 192.168.x.x:8100 or localhost:8100)
       if (
         origin.startsWith('http://192.168.') || 
+        origin.startsWith('https://huntpuk-8c96d.web.app') ||
         origin.startsWith('http://10.') || 
         origin.startsWith('http://localhost:') || 
         origin.startsWith('https://localhost:')
