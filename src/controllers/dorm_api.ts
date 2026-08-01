@@ -1877,17 +1877,21 @@ export const removeDorm_api = async (req: Request, res: Response) => {
   const userRole = (req as any).user?.role;
   const userId = (req as any).user?.id;
 
+  console.log("force", force);
+  console.log("userRole", userRole);
+  console.log("userId", userId);
+
   try {
     if (userRole === 3 || force) {
       if (userRole !== 3 && force) {
         const [ownerCheck] = await conn.execute<RowDataPacket[]>(
-          "SELECT DORM_OWNER_ID FROM DORMITORIES WHERE DORM_ID = ?",
+          "SELECT do.USER_ID FROM DORMITORIES JOIN DORM_OWNERS do ON DORMITORIES.DORM_OWNER_ID = do.DORM_OWNER_ID WHERE DORM_ID = ?",
           [id],
         );
-        if (
-          ownerCheck.length === 0 ||
-          ownerCheck[0]?.DORM_OWNER_ID !== userId
-        ) {
+
+        console.log(ownerCheck);
+
+        if (ownerCheck.length === 0 || ownerCheck[0]?.USER_ID !== userId) {
           return res
             .status(403)
             .json({ success: false, message: "ไม่มีสิทธิ์ลบข้อมูลหอพักนี้" });
@@ -1943,10 +1947,10 @@ export const removeDorm_api = async (req: Request, res: Response) => {
       // Dorm Owner: Soft Delete
       // Add ownership check for security
       const [ownerCheck] = await conn.execute<RowDataPacket[]>(
-        "SELECT DORM_OWNER_ID FROM DORMITORIES WHERE DORM_ID = ?",
+        "SELECT do.USER_ID FROM DORMITORIES JOIN DORM_OWNERS do ON DORMITORIES.DORM_OWNER_ID = do.DORM_OWNER_ID WHERE DORM_ID = ?",
         [id],
       );
-      if (ownerCheck.length === 0 || ownerCheck[0]?.DORM_OWNER_ID !== userId) {
+      if (ownerCheck.length === 0 || ownerCheck[0]?.USER_ID !== userId) {
         return res
           .status(403)
           .json({ success: false, message: "ไม่มีสิทธิ์ลบข้อมูลหอพักนี้" });

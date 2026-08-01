@@ -308,7 +308,7 @@ router.delete("/api/spec/dorm/:id", verifyToken, dormController.removeDorm_api);
 router.put(
   "/api/spec/restoreDorm/:id",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.restoreDorm_api,
 );
 router.put(
