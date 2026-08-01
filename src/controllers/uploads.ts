@@ -25,8 +25,6 @@ export async function processAndUploadImages(
   const basePath = `dorms/${dormId}_u${ownerId}`;
   const bucket = storage.bucket(bucketName);
 
-  const uploadPromises: Promise<void>[] = [];
-
   for (const [fieldname, fileArray] of Object.entries(files)) {
     if (!fileArray || fileArray.length === 0) continue;
 
@@ -56,7 +54,8 @@ export async function processAndUploadImages(
       const blob = bucket.file(fullPath);
 
       // 3. Processing and Upload Pipeline
-      const uploadPromise = new Promise<void>((resolve, reject) => {
+      // Await sequentially to prevent Out of Memory (OOM) errors from concurrent Sharp processing
+      await new Promise<void>((resolve, reject) => {
         const blobStream = blob.createWriteStream({
           resumable: false,
           contentType: file.mimetype === 'image/svg+xml' ? "image/svg+xml" : "image/webp",
@@ -88,13 +87,7 @@ export async function processAndUploadImages(
             });
         }
       });
-
-      uploadPromises.push(uploadPromise);
     }
-
-    // Wait for all uploads of THIS field to finish to maintain order if needed, 
-    // or we can wait for all at the end. Waiting here makes it easier to assign to the object.
-    await Promise.all(uploadPromises);
 
     // Assign to return object
     if (fieldname === "OTHER_IMG") {
@@ -103,13 +96,7 @@ export async function processAndUploadImages(
       // For single fields, just return the first URL
       uploadedUrls[fieldname] = urlsForField[0]!;
     }
-    
-    // clear the array for the next field if we were sharing it (we aren't)
-    // uploadPromises.length = 0; 
   }
-
-  // Ensure all promises actually finish (they should have in the loop, but safety first)
-  await Promise.all(uploadPromises);
 
   return uploadedUrls;
 }
