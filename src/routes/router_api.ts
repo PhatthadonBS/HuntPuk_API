@@ -15,7 +15,7 @@ import { cacheMiddleware } from "../middlewares/cache";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }, // 10MB limit
 });
 
 const router = express.Router();
@@ -56,7 +56,11 @@ const imgTypeUploads = upload.fields([
 
 //user data group
 router.post("/api/user/registerSec1", userController.registerSec1);
-router.post("/api/user/registerSec2", verifyTokenOptional, userController.registerSec2);
+router.post(
+  "/api/user/registerSec2",
+  verifyTokenOptional,
+  userController.registerSec2,
+);
 router.put(
   "/api/user/resetPassword",
   verifyToken,
@@ -131,7 +135,11 @@ router.get(
   requireRole(3),
   dormController.getPendingDormReq_api,
 );
-router.get("/api/dorms/zones", cacheMiddleware(3600), dormController.getAllZones);
+router.get(
+  "/api/dorms/zones",
+  cacheMiddleware(3600),
+  dormController.getAllZones,
+);
 router.post(
   "/api/dorms/zones",
   verifyToken,
@@ -144,7 +152,11 @@ router.delete(
   requireRole(3),
   dormController.deleteDormZone,
 );
-router.get("/api/dorms/dormTypes", cacheMiddleware(3600), dormController.getAllDormTypes);
+router.get(
+  "/api/dorms/dormTypes",
+  cacheMiddleware(3600),
+  dormController.getAllDormTypes,
+);
 router.post(
   "/api/dorms/dormTypes",
   verifyToken,
@@ -157,7 +169,11 @@ router.delete(
   requireRole(3),
   dormController.deleteDormType,
 );
-router.get("/api/dorms/roomTypes", cacheMiddleware(3600), dormController.getAllRoomTypes);
+router.get(
+  "/api/dorms/roomTypes",
+  cacheMiddleware(3600),
+  dormController.getAllRoomTypes,
+);
 router.post(
   "/api/dorms/roomTypes",
   verifyToken,
@@ -261,7 +277,11 @@ router.post(
   upload.single("fac"),
   dormController.addFacility_api,
 );
-router.get("/api/dorms/facilities", cacheMiddleware(3600), dormController.getFacilities_api);
+router.get(
+  "/api/dorms/facilities",
+  cacheMiddleware(3600),
+  dormController.getFacilities_api,
+);
 router.get(
   "/api/dorms/facilities/pending",
   verifyToken,

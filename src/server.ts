@@ -76,6 +76,15 @@ app.use('/', router);
 // 6. Generic Error Handler (Prevents server crashes)
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled Error:", err);
+  
+  if (err.code === "LIMIT_FILE_SIZE") {
+    res.status(400).json({
+      success: false,
+      message: "ข้อผิดพลาด: ขนาดไฟล์ต้องไม่เกิน 10MB"
+    });
+    return;
+  }
+
   res.status(500).json({
     success: false,
     message: "Internal Server Error",

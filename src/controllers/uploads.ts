@@ -18,7 +18,7 @@ export async function processAndUploadImages(
   ownerId: number
 ): Promise<Record<string, string | string[]>> {
   
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml", "application/octet-stream"];
   const uploadedUrls: Record<string, string | string[]> = {};
   
   // Create base path: dorms/{dormId}_u{ownerId}/
@@ -123,7 +123,7 @@ export async function fileUpload(
     subFolder: string | null,
     fileOf: string
   ) {
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/svg+xml", "application/octet-stream"];
     if (!allowed.includes(file.mimetype)) {
       throw new Error("ข้อผิดพลาด: ประเภทไฟล์ไม่ถูกต้อง (รองรับเฉพาะ JPEG, PNG, WEBP, SVG)");
     }
