@@ -182,7 +182,11 @@ router.delete(
   requireRole(3),
   dormController.deleteRoomType,
 );
-router.get("/api/dorms/bedTypes", dormController.getAllBedTypes);
+router.get(
+  "/api/dorms/bedTypes",
+  cacheMiddleware(3600),
+  dormController.getAllBedTypes
+);
 router.post(
   "/api/dorms/bedTypes",
   verifyToken,
@@ -195,7 +199,11 @@ router.delete(
   requireRole(3),
   dormController.deleteBedType,
 );
-router.get("/api/dorms/priceTypes", dormController.getAllPriceTypes);
+router.get(
+  "/api/dorms/priceTypes",
+  cacheMiddleware(3600),
+  dormController.getAllPriceTypes
+);
 router.post(
   "/api/dorms/priceTypes",
   verifyToken,
@@ -208,7 +216,11 @@ router.delete(
   requireRole(3),
   dormController.deletePriceType,
 );
-router.get("/api/dorms/dormStatuses", dormController.getAllDormStatuses);
+router.get(
+  "/api/dorms/dormStatuses",
+  cacheMiddleware(3600),
+  dormController.getAllDormStatuses
+);
 router.post(
   "/api/dorms/dormStatuses",
   verifyToken,

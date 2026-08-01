@@ -44,3 +44,20 @@ export const cacheMiddleware = (durationSeconds: number) => {
     }
   };
 };
+
+/**
+ * Utility to clear cache for a specific key pattern
+ * @param keyPattern Redis key pattern to delete
+ */
+export const clearCache = async (keyPattern: string) => {
+  if (redisClient.isOpen) {
+    try {
+      const keys = await redisClient.keys(keyPattern);
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    } catch (err) {
+      console.error('Clear cache error:', err);
+    }
+  }
+};
