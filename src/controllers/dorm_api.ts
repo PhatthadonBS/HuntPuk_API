@@ -295,7 +295,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
       
-      WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
+      WHERE d.REQ_STATUS = 1
       
       GROUP BY d.DORM_ID
       ORDER BY d.DORM_ID DESC
