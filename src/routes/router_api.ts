@@ -15,7 +15,7 @@ import { cacheMiddleware } from "../middlewares/cache";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 const router = express.Router();
@@ -62,12 +62,12 @@ const imgTypeUploads = upload.fields([
 
 //user data group
 router.post("/api/user/registerSec1", userController.registerSec1);
-router.post("/api/user/registerSec2", verifyTokenOptional, userController.registerSec2);
-router.put(
-  "/api/user/resetPassword",
-  verifyToken,
-  userController.resetPassword_api,
+router.post(
+  "/api/user/registerSec2",
+  verifyTokenOptional,
+  userController.registerSec2,
 );
+router.put("/api/user/resetPassword", userController.resetPassword_api);
 router.get("/api/user/users", verifyToken, userController.getUsers_api);
 router.get("/api/user/members", verifyToken, userController.getMembers_api);
 router.get(
@@ -91,7 +91,7 @@ router.post("/api/user/review", verifyToken, dormController.addReview_api);
 router.get(
   "/api/user/dormOwnerReq",
   verifyToken,
-  requireRole(3),
+  requireRole(1, 2, 3),
   dormController.getPendingOwners_api,
 );
 router.get(
@@ -137,7 +137,11 @@ router.get(
   requireRole(3),
   dormController.getPendingDormReq_api,
 );
-router.get("/api/dorms/zones", cacheMiddleware(3600), dormController.getAllZones);
+router.get(
+  "/api/dorms/zones",
+  cacheMiddleware(3600),
+  dormController.getAllZones,
+);
 router.post(
   "/api/dorms/zones",
   verifyToken,
@@ -150,7 +154,11 @@ router.delete(
   requireRole(3),
   dormController.deleteDormZone,
 );
-router.get("/api/dorms/dormTypes", cacheMiddleware(3600), dormController.getAllDormTypes);
+router.get(
+  "/api/dorms/dormTypes",
+  cacheMiddleware(3600),
+  dormController.getAllDormTypes,
+);
 router.post(
   "/api/dorms/dormTypes",
   verifyToken,
@@ -163,7 +171,11 @@ router.delete(
   requireRole(3),
   dormController.deleteDormType,
 );
-router.get("/api/dorms/roomTypes", cacheMiddleware(3600), dormController.getAllRoomTypes);
+router.get(
+  "/api/dorms/roomTypes",
+  cacheMiddleware(3600),
+  dormController.getAllRoomTypes,
+);
 router.post(
   "/api/dorms/roomTypes",
   verifyToken,
@@ -176,7 +188,11 @@ router.delete(
   requireRole(3),
   dormController.deleteRoomType,
 );
-router.get("/api/dorms/bedTypes", dormController.getAllBedTypes);
+router.get(
+  "/api/dorms/bedTypes",
+  cacheMiddleware(3600),
+  dormController.getAllBedTypes
+);
 router.post(
   "/api/dorms/bedTypes",
   verifyToken,
@@ -189,7 +205,11 @@ router.delete(
   requireRole(3),
   dormController.deleteBedType,
 );
-router.get("/api/dorms/priceTypes", dormController.getAllPriceTypes);
+router.get(
+  "/api/dorms/priceTypes",
+  cacheMiddleware(3600),
+  dormController.getAllPriceTypes
+);
 router.post(
   "/api/dorms/priceTypes",
   verifyToken,
@@ -202,7 +222,11 @@ router.delete(
   requireRole(3),
   dormController.deletePriceType,
 );
-router.get("/api/dorms/dormStatuses", dormController.getAllDormStatuses);
+router.get(
+  "/api/dorms/dormStatuses",
+  cacheMiddleware(3600),
+  dormController.getAllDormStatuses
+);
 router.post(
   "/api/dorms/dormStatuses",
   verifyToken,
@@ -267,7 +291,11 @@ router.post(
   upload.single("fac"),
   dormController.addFacility_api,
 );
-router.get("/api/dorms/facilities", cacheMiddleware(3600), dormController.getFacilities_api);
+router.get(
+  "/api/dorms/facilities",
+  cacheMiddleware(3600),
+  dormController.getFacilities_api,
+);
 router.get(
   "/api/dorms/facilities/pending",
   verifyToken,
@@ -283,7 +311,7 @@ router.put(
 router.put(
   "/api/dorms/changeStatus/:id",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.changeDormStatus_api,
 );
 
@@ -298,7 +326,7 @@ router.delete("/api/spec/dorm/:id", verifyToken, dormController.removeDorm_api);
 router.put(
   "/api/spec/restoreDorm/:id",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.restoreDorm_api,
 );
 router.put(
@@ -346,7 +374,7 @@ router.get("/api/dorms/review/:id", dormController.getReviewsByDormId_api);
 router.get(
   "/api/dorms/facility-req-count",
   verifyToken,
-  requireRole(3),
+  requireRole(2, 3),
   dormController.getFacilityReqCount_api,
 );
 router.get("/api/dorms/:id", dormController.getDormById);
