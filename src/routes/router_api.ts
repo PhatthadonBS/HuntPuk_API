@@ -35,6 +35,12 @@ router.get(
   requireRole(3),
   dashboardController.getDashboardStats_api,
 );
+router.get(
+  "/api/dashboard/dorm-views/:id",
+  verifyToken,
+  requireRole(3),
+  dashboardController.getDormViewsStats_api,
+);
 
 const strictLimiter = rateLimit({
   windowMs: 3 * 60 * 1000,
