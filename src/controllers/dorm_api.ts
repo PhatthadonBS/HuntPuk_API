@@ -512,7 +512,8 @@ export const getAllZones = async (req: Request, res: Response) => {
         ZONE_ID, 
         ZONE_NAME, 
         ST_X(COORDINATES) as lat, 
-        ST_Y(COORDINATES) as lng 
+        ST_Y(COORDINATES) as lng,
+        RADIUS as radius
       FROM DORM_ZONES 
       ORDER BY ZONE_ID ASC
     `;
@@ -3058,7 +3059,7 @@ export const deleteDormStatus = async (req: Request, res: Response) => {
 
 export const addDormZone = async (req: Request, res: Response) => {
   try {
-    const { name, lat, lng } = req.body;
+    const { name, lat, lng, radius } = req.body;
     if (!name)
       return res
         .status(400)
@@ -3069,10 +3070,11 @@ export const addDormZone = async (req: Request, res: Response) => {
       lat !== undefined && lat !== null && lat !== "" ? Number(lat) : 13.7563;
     const longitude =
       lng !== undefined && lng !== null && lng !== "" ? Number(lng) : 100.5018;
+    const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
 
     const [result] = await dbcon.execute<any>(
-      "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES) VALUES (?, ST_GeomFromText(?))",
-      [name, `POINT(${latitude} ${longitude})`],
+      "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES, RADIUS) VALUES (?, ST_GeomFromText(?), ?)",
+      [name, `POINT(${latitude} ${longitude})`, r],
     );
     res.json({
       success: true,
@@ -3214,7 +3216,7 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
 export const updateMasterType = async (req: Request, res: Response) => {
   try {
     const { type, id } = req.params;
-    const { name, lat, lng } = req.body;
+    const { name, lat, lng, radius } = req.body;
 
     if (!name)
       return res
@@ -3258,9 +3260,10 @@ export const updateMasterType = async (req: Request, res: Response) => {
           lng !== undefined && lng !== null && lng !== ""
             ? Number(lng)
             : 100.5018;
+        const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
         query =
-          "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?) WHERE ZONE_ID = ?";
-        params = [name, `POINT(${latitude} ${longitude})`, id];
+          "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?), RADIUS = ? WHERE ZONE_ID = ?";
+        params = [name, `POINT(${latitude} ${longitude})`, r, id];
         break;
       default:
         return res
