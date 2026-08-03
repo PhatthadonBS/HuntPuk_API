@@ -2324,33 +2324,33 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.SCORE,
                   d.FRONT_DORM_IMAGE as image, 
                   d.VIEW_COUNT,
-                  dz.ZONE_NAME,
+                  d.UPDATE_AT as update_at,
+                  d.ZONE_ID,
+                  dz.ZONE_NAME as zone,
+                  ST_X(d.COORDINATES) as lat, 
+                  ST_Y(d.COORDINATES) as lng,
                   COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) AND rp.PRICE > 0 THEN rp.PRICE END), 0) as start_price,
                   d.DORM_STATUS_ID,
+                  ds.DORM_STATUS_NAME,
+                  d.DORM_TYPE_ID,
+                  dt.DORM_TYPE_NAME,
+                  d.WATER_UNIT,
+                  d.WATER_LUMP,
+                  d.ELECT_UNIT,
                   (SELECT COUNT(*) FROM FAVORITES f WHERE f.DORM_ID = d.DORM_ID) as fav_count
               FROM DORMITORIES d
               LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
               LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
+              LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+              LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
               WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID IN (1, 3)
-              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, dz.ZONE_NAME, d.DORM_STATUS_ID
+              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, d.UPDATE_AT, d.ZONE_ID, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT
               ${orderClause}
               LIMIT ?
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
-
-    // ดึงสถานะหอพักทั้งหมดมาจับคู่เพื่อลดภาระฐานข้อมูล (Loop foreach)
-    const [statuses] = await dbcon.execute<RowDataPacket[]>(
-      "SELECT DORM_STATUS_ID, DORM_STATUS_NAME FROM DORM_STATUSES",
-    );
-    const statusMap: any = {};
-    statuses.forEach(
-      (s: any) => (statusMap[s.DORM_STATUS_ID] = s.DORM_STATUS_NAME),
-    );
-    dorms.forEach((dorm: any) => {
-      dorm.DORM_STATUS_NAME = statusMap[dorm.DORM_STATUS_ID] || "ไม่ทราบสถานะ";
-    });
 
     res.json({
       success: true,
@@ -2683,7 +2683,8 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     dt.DORM_TYPE_NAME,
                     d.WATER_UNIT,
                     d.WATER_LUMP,
-                    d.ELECT_UNIT
+                    d.ELECT_UNIT,
+                    d.VIEW_COUNT
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -2779,7 +2780,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       }
     }
 
-    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT `;
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT, d.VIEW_COUNT `;
 
     const havingClauses = [];
     if (
