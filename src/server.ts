@@ -4,6 +4,7 @@ import express, { Request, Response, NextFunction } from "express";
 import router from "./routes/router_api";
 import cors from "cors";
 import morgan from "morgan";
+import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { startMonthlyViewSummaryJob } from "./controllers/cron_jobs";
 import { connectRedis } from "./config/redis";
@@ -15,6 +16,9 @@ const app = express();
 
 // 1. Trust proxy if behind a load balancer (common for cloud deploys)
 app.set("trust proxy", 1);
+
+// 1.5 Helmet — ใส่ HTTP Security Headers ป้องกัน XSS, Clickjacking, MIME sniffing
+app.use(helmet());
 
 app.use(morgan("dev"));
 
@@ -66,14 +70,19 @@ export const globalLimiter = rateLimit({
 
 app.use(globalLimiter);
 
-// 4. Body Parsers (Built-in Express)
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 4. Body Parsers (Built-in Express) — จำกัด 100KB ป้องกัน Memory Exhaustion
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // 5. API Routes
 app.use("/", router);
 
-// 6. Generic Error Handler (Prevents server crashes)
+// 6. 404 Handler — ทุก route ที่ไม่มีจะ return เหมือนกันหมด ป้องกันการเดา path
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: "Not Found" });
+});
+
+// 7. Generic Error Handler (Prevents server crashes)
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled Error:", err);
 

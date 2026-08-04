@@ -231,6 +231,8 @@ export const login = async (req: Request, res: Response) => {
     });
   }
   const { email, password } = validationResult.data;
+  // รับค่า rememberMe จาก body (ถ้าไม่ส่งมา default = false)
+  const rememberMe = req.body.rememberMe === true;
   const conn = await dbcon.getConnection();
   try {
     const [user] = await conn.query<UserDataPostRes[]>(
@@ -262,21 +264,23 @@ export const login = async (req: Request, res: Response) => {
         .json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
     }
 
-    // สร้าง Token
+    // สร้าง Token — ถ้า rememberMe = 7 วัน, ไม่ remember = 1 ชั่วโมง
+    const expiresIn = rememberMe ? "7d" : "1h";
     const token = jwt.sign(
       {
         id: user[0].USER_ID,
         role: user[0].ROLE_TYPE_ID,
         status: user[0].ACCOUNT_STATUS,
-      }, // Payload
+      },
       jwtSecret,
-      { expiresIn: "7d" },
+      { expiresIn },
     );
 
     res.json({
       logged_in: true,
       message: "เข้าสู่ระบบสำเร็จ",
-      token: token, // <--- เพิ่มตัวแปรนี้ส่งกลับไป
+      token: token,
+      rememberMe,
       user: {
         id: user[0]!.USER_ID,
         username: user[0]!.USERNAME,

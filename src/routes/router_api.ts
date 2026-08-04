@@ -47,6 +47,24 @@ const strictLimiter = rateLimit({
   max: 1,
 });
 
+// ป้องกัน Brute-force login: 10 ครั้ง / 15 นาที ต่อ IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many login attempts from this IP, please try again after 15 minutes.",
+});
+
+// ป้องกัน Mail Bombing: 5 ครั้ง / 1 ชั่วโมง ต่อ IP
+const mailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many mail requests from this IP, please try again after 1 hour.",
+});
+
 const imgTypeUploads = upload.fields([
   { name: "FRONT_DORM_IMG", maxCount: 1 },
   { name: "LICENSE_IMG", maxCount: 1 },
@@ -102,7 +120,7 @@ router.get(
 );
 
 // auth group
-router.post("/api/auth/login", userController.login);
+router.post("/api/auth/login", loginLimiter, userController.login);
 router.post(
   "/api/auth/SendOTP/register",
   strictLimiter,
@@ -118,7 +136,7 @@ router.delete("/api/auth/OTPVerify", userController.OTP_Verify_api);
 router.post("/api/auth/recoverAccount", userController.recoverAccount_api);
 
 // other data groupt
-router.post("/api/other/mailSenter", userController.resMailSender_api);
+router.post("/api/other/mailSenter", mailLimiter, userController.resMailSender_api);
 router.post(
   "/api/other/addFavorite",
   verifyToken,
