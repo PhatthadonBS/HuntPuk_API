@@ -800,13 +800,9 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       let roomName = room.roomType.trim();
 
       if (insertedRoomNames.has(roomName)) {
-        const bedSuffix =
-          room.bedType === "3" || room.bedType === "4"
-            ? "เตียงคู่"
-            : "เตียงเดี่ยว";
-        roomName = `${roomName} (${bedSuffix})`;
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
       }
-      if (insertedRoomNames.has(roomName)) continue;
       insertedRoomNames.add(roomName);
 
       let roomTypeId;
@@ -828,7 +824,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
         `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
         [dormId, roomTypeId],
       );
-      if (existingDr.length > 0) continue;
+      if (existingDr.length > 0) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+      }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
@@ -1277,13 +1276,9 @@ export const createDorm_api = async (req: Request, res: Response) => {
       let roomName = room.roomType.trim();
 
       if (insertedRoomNames.has(roomName)) {
-        const bedSuffix =
-          room.bedType === "3" || room.bedType === "4"
-            ? "เตียงคู่"
-            : "เตียงเดี่ยว";
-        roomName = `${roomName} (${bedSuffix})`;
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
       }
-      if (insertedRoomNames.has(roomName)) continue;
       insertedRoomNames.add(roomName);
 
       let roomTypeId;
@@ -1305,7 +1300,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
         `SELECT DORM_ROOM_ID FROM DORM_ROOMS WHERE DORM_ID = ? AND ROOM_TYPE_ID = ?`,
         [dormId, roomTypeId],
       );
-      if (existingDr.length > 0) continue;
+      if (existingDr.length > 0) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+      }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO DORM_ROOMS (DORM_ID, ROOM_TYPE_ID) VALUES (?, ?)`,
@@ -1692,18 +1690,9 @@ export const updateRoomTypes_fn = async (
 
     let roomName = room.roomType.trim();
 
-    // 🌟 ระบบสุดฉลาด: ถ้าเจอชื่อห้องซ้ำกันในรอบการบันทึกนี้ ให้ดึงประเภทเตียงมาต่อท้ายชื่อห้องอัตโนมัติ!
     if (insertedRoomNames.has(roomName)) {
-      const bedSuffix =
-        room.bedType === "Double Bed" || room.bedType === "2"
-          ? "เตียงคู่"
-          : "เตียงเดี่ยว";
-      roomName = `${roomName} (${bedSuffix})`;
-    }
-
-    // ถ้าแอบต่อท้ายแล้วยังซ้ำอีก (เช่น ผู้ใช้กดส่ง "ห้องพัดลมเตียงคู่" มา 2 กล่องเป๊ะๆ) อันนี้ต้องข้ามของจริงเพื่อกันพัง
-    if (insertedRoomNames.has(roomName)) {
-      continue;
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
     }
     insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
