@@ -250,7 +250,10 @@ export const login = async (req: Request, res: Response) => {
         .json({ message: "บัญชีผู้ใช้นี้ถูกระงับการใช้งาน" });
     }
 
-    const isMatch = await bcrypt.compare(password.toString().trim(), user[0]!.PASSWORD);
+    const isMatch = await bcrypt.compare(
+      password.toString().trim(),
+      user[0]!.PASSWORD,
+    );
     if (!isMatch) {
       return res
         .status(401)
@@ -595,32 +598,104 @@ export const hardDeleteAccount_api = async (req: Request, res: Response) => {
     return res
       .status(400)
       .json({ message: "ไม่สามารถลบบัญชีผู้ดูแลระบบหลักได้" });
+
+  const conn = await dbcon.getConnection();
   try {
-    const [result] = await dbcon.execute<ResultSetHeader>(
+    await conn.beginTransaction();
+
+    // 1. Check if user is an owner
+    const [ownerRows] = await conn.execute<RowDataPacket[]>(
+      "SELECT DORM_OWNER_ID FROM DORM_OWNERS WHERE USER_ID = ?",
+      [id],
+    );
+
+    if (ownerRows.length > 0) {
+      const dormOwnerId = ownerRows[0]?.DORM_OWNER_ID;
+      if (!dormOwnerId)
+        throw new Error("No dorm owner ID found for user ID: " + id);
+
+      // 2. Transfer facility types created by this user to admin (USER_ID = 1)
+      await conn.execute(
+        "UPDATE FACILITIES_TYPES SET ADD_BY = 1 WHERE ADD_BY = ?",
+        [id],
+      );
+
+      // 3. Get all dorms owned by this owner
+      const [dorms] = await conn.execute<RowDataPacket[]>(
+        "SELECT DORM_ID FROM DORMITORIES WHERE DORM_OWNER_ID = ?",
+        [dormOwnerId],
+      );
+
+      // 4. Cascade delete all dorm-related data
+      for (const dorm of dorms) {
+        const dormId = dorm.DORM_ID;
+
+        // Delete ROOM_PRICES & ROOM_BEDS (FK -> DORM_ROOMS)
+        await conn.execute(
+          "DELETE rp FROM ROOM_PRICES rp JOIN DORM_ROOMS dr ON rp.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
+          [dormId],
+        );
+        await conn.execute(
+          "DELETE rb FROM ROOM_BEDS rb JOIN DORM_ROOMS dr ON rb.DORM_ROOM_ID = dr.DORM_ROOM_ID WHERE dr.DORM_ID = ?",
+          [dormId],
+        );
+
+        // Delete tables with FK -> DORM_ID
+        await conn.execute("DELETE FROM DORM_ROOMS WHERE DORM_ID = ?", [
+          dormId,
+        ]);
+        await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_ID = ?", [
+          dormId,
+        ]);
+        await conn.execute("DELETE FROM FACILITIES_DORMS WHERE DORM_ID = ?", [
+          dormId,
+        ]);
+        await conn.execute("DELETE FROM FAVORITES WHERE DORM_ID = ?", [dormId]);
+        await conn.execute("DELETE FROM REVIEWS WHERE DORM_ID = ?", [dormId]);
+        await conn.execute("DELETE FROM STATISTIC_WEB_VIEW WHERE DORM_ID = ?", [
+          dormId,
+        ]);
+        await conn.execute("DELETE FROM WEB_VIEW_LOGS WHERE DORM_ID = ?", [
+          dormId,
+        ]);
+      }
+
+      // 5. Delete all dormitories owned by this owner
+      await conn.execute("DELETE FROM DORMITORIES WHERE DORM_OWNER_ID = ?", [
+        dormOwnerId,
+      ]);
+
+      // 6. Delete the DORM_OWNERS record
+      await conn.execute("DELETE FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?", [
+        dormOwnerId,
+      ]);
+    }
+
+    // 7. Delete user's own favorites & reviews (as a member)
+    await conn.execute("DELETE FROM FAVORITES WHERE USER_ID = ?", [id]);
+    await conn.execute("DELETE FROM REVIEWS WHERE USER_ID = ?", [id]);
+
+    // 8. Delete the user
+    const [result] = await conn.execute<ResultSetHeader>(
       "DELETE FROM USERS WHERE USER_ID = ?",
       [id],
     );
 
-    if (result.affectedRows > 0) {
-      return res
-        .status(200)
-        .json({ message: "บัญชีผู้ใช้ถูกลบออกจากระบบอย่างถาวรแล้ว" });
-    } else {
+    if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ message: "ไม่มีข้อมูลผู้ใช้นี้ในระบบ" });
     }
-  } catch (error: any) {
-    if (
-      error.code === "ER_ROW_IS_REFERENCED_2" ||
-      error.code === "ER_ROW_IS_REFERENCED"
-    ) {
-      // If ON DELETE CASCADE is not configured, fallback to manual cascade or report error
-      return res.status(400).json({
-        message: "ไม่สามารถลบได้เนื่องจากมีข้อมูลผูกพัน (เช่น หอพัก/รีวิว)",
-        error,
-      });
-    }
+
+    await conn.commit();
+    return res
+      .status(200)
+      .json({ message: "บัญชีผู้ใช้ถูกลบออกจากระบบอย่างถาวรแล้ว" });
+  } catch (error) {
+    await conn.rollback();
     console.error(error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดภายในระบบ" });
+  } finally {
+    conn.release();
   }
 };
 
