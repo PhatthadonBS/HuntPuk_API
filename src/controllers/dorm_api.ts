@@ -987,19 +987,33 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
     }
 
     // 4. Handle Custom Facility Image (if applicable)
-    const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
-    if (facIconUrl) {
-      const [userRows] = await conn.execute<RowDataPacket[]>(
-        "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?",
-        [dorm_owner_id],
+    const [userRows] = await conn.execute<RowDataPacket[]>(
+      "SELECT USER_ID FROM DORM_OWNERS WHERE DORM_OWNER_ID = ?",
+      [dorm_owner_id],
+    );
+    if (userRows.length > 0) {
+      const addBy = userRows[0]!.USER_ID;
+      const [facRows] = await conn.execute<RowDataPacket[]>(
+        `SELECT ft.FAC_TYPE_ID 
+         FROM FACILITIES_TYPES ft 
+         JOIN FACILITIES_DORMS fd ON ft.FAC_TYPE_ID = fd.FAC_TYPE_ID 
+         WHERE fd.DORM_ID = ? AND (ft.FAC_TYPE_ICON IS NULL OR ft.FAC_TYPE_ICON = '') AND ft.ADD_BY = ?
+         ORDER BY ft.FAC_TYPE_ID ASC`,
+        [dormId, addBy]
       );
-      if (userRows.length > 0) {
-        await conn.execute(
-          "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND FAC_TYPE_ICON IS NULL ORDER BY FAC_TYPE_ID DESC LIMIT 1",
-          [facIconUrl, userRows[0]!.USER_ID],
-        );
-        await clearCache("*__express__/api/dorms/facilities*");
+
+      let cacheCleared = false;
+      for (let i = 0; i < 3; i++) {
+        const facIconUrl = (uploadedUrls[`FACILITY_IMG_${i}`] as string) || "";
+        if (facIconUrl && facRows[i]) {
+          await conn.execute(
+            "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE FAC_TYPE_ID = ?",
+            [facIconUrl, facRows[i]!.FAC_TYPE_ID],
+          );
+          cacheCleared = true;
+        }
       }
+      if (cacheCleared) await clearCache("*__express__/api/dorms/facilities*");
     }
 
     // 5. Update Other Images (Gallery) and handle deletions
@@ -3218,7 +3232,7 @@ export const approveFacilityRequest_api = async (
   try {
     await conn.beginTransaction();
     await conn.execute(
-      `UPDATE FACILITIES_TYPES SET STATUS = 2 WHERE FAC_TYPE_ID = ?`,
+      `UPDATE FACILITIES_TYPES SET STATUS = 1 WHERE FAC_TYPE_ID = ?`,
       [fac_id],
     );
     await conn.execute(
@@ -3247,16 +3261,34 @@ export const rejectFacilityRequest_api = async (
   const conn = await dbcon.getConnection();
   const fac_id = req.params.fac_id as string;
   try {
-    await conn.beginTransaction();
-    await conn.execute(
-      `UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`,
+    // ดึงข้อมูลรูปภาพก่อนจะลบ
+    const [facRows] = await conn.execute<RowDataPacket[]>(
+      `SELECT FAC_TYPE_ICON FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`,
       [fac_id],
     );
+
+    await conn.beginTransaction();
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
     await conn.commit();
+
+    // ลบรูปออกจาก Storage หลังจากลบในฐานข้อมูลเสร็จแล้ว
+    if (
+      facRows.length > 0 &&
+      facRows[0]!.FAC_TYPE_ICON &&
+      facRows[0]!.FAC_TYPE_ICON.startsWith("http")
+    ) {
+      await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
+    }
+
     await clearCache("*__express__/api/dorms/facilities*");
     return res
       .status(200)
-      .json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
+      .json({ success: true, message: "ปฏิเสธคำร้องขอและลบข้อมูลสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
     res.status(500).json({
@@ -3280,10 +3312,12 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     );
 
     await conn.beginTransaction();
-    await conn.execute(
-      `UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`,
-      [fac_id],
-    );
+    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
+    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+      fac_id,
+    ]);
     await conn.commit();
 
     // ลบรูปออกจาก Storage หลังจากลบในฐานข้อมูลเสร็จแล้ว

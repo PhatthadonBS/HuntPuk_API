@@ -68,7 +68,9 @@ const mailLimiter = rateLimit({
 const imgTypeUploads = upload.fields([
   { name: "FRONT_DORM_IMG", maxCount: 1 },
   { name: "LICENSE_IMG", maxCount: 1 },
-  { name: "FACILITY_IMG", maxCount: 1 },
+  { name: "FACILITY_IMG_0", maxCount: 1 },
+  { name: "FACILITY_IMG_1", maxCount: 1 },
+  { name: "FACILITY_IMG_2", maxCount: 1 },
   { name: "CEILING_IMG", maxCount: 1 },
   { name: "WALL_IMG", maxCount: 1 },
   { name: "FLOOR_IMG", maxCount: 1 },
