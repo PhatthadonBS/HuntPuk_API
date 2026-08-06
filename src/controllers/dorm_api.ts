@@ -2880,7 +2880,7 @@ export const addDormType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
 
     const [dormData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -2926,7 +2926,7 @@ export const addRoomType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
 
     const [dormData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -2973,7 +2973,7 @@ export const addBedType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทเตียง" });
 
     const [bedTypeData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3030,7 +3030,7 @@ export const addPriceType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทราคา" });
 
     const [priceTypeData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3089,7 +3089,7 @@ export const addDormStatus = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อสถานะหอพัก" });
 
     const [dormStatusData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3137,7 +3137,7 @@ export const addDormZone = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อโซนหอพัก" });
 
     const [dormZoneData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT * as COUNT FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
+      "SELECT DORM_TYPE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
