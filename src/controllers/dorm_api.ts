@@ -2057,7 +2057,7 @@ export const addReview_api = async (req: Request, res: Response) => {
     }
 
     const [avgResult] = await conn.execute<RowDataPacket[]>(
-      "SELECT AVG(SCORE) as avg_score FROM REVIEWS WHERE DORM_ID = ?",
+      "SELECT AVG(r.SCORE) as avg_score FROM REVIEWS r JOIN USERS u ON r.USER_ID = u.USER_ID WHERE r.DORM_ID = ?",
       [dorm_id],
     );
 
@@ -2111,7 +2111,7 @@ export const deleteReview_api = async (req: Request, res: Response) => {
     const dormId = reviewData[0]?.DORM_ID;
     await conn.execute("DELETE FROM REVIEWS WHERE REVIEW_ID = ?", [id]);
     const [avgResult] = await conn.execute<RowDataPacket[]>(
-      "SELECT AVG(SCORE) as avg_score FROM REVIEWS WHERE DORM_ID = ?",
+      "SELECT AVG(r.SCORE) as avg_score FROM REVIEWS r JOIN USERS u ON r.USER_ID = u.USER_ID WHERE r.DORM_ID = ?",
       [dormId],
     );
 
@@ -2203,7 +2203,7 @@ export const getReviewsByDormId_api = async (req: Request, res: Response) => {
         r.USER_ID,
         u.USERNAME
       FROM REVIEWS r
-      JOIN USERS u ON r.USER_ID = u.USER_ID
+      LEFT JOIN USERS u ON r.USER_ID = u.USER_ID
       WHERE r.DORM_ID = ?
       ORDER BY r.CREATE_AT DESC
     `;
@@ -2520,7 +2520,7 @@ export const getFacilities_api = async (req: Request, res: Response) => {
     const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 2`;
 
     const [facs] = await conn.query<RowDataPacket[]>(sql);
-    
+
     if (facs.length > 0) {
       return res.status(200).json({ success: true, data: facs });
     } else {
@@ -2549,7 +2549,7 @@ export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
     WHERE FD.DORM_ID = ? AND FT.STATUS = 2`;
 
     const [facs] = await conn.query<FacOfDormGetRes[]>(sql, [Number(dorm_id)]);
-    
+
     if (facs.length > 0) {
       return res.status(200).json(facs);
     } else {
@@ -3190,7 +3190,11 @@ export const getFacilityRequests_api = async (req: Request, res: Response) => {
     const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 1`;
     const [facs] = await conn.query<RowDataPacket[]>(sql);
     const formattedFacs = facs.map((fac: any) => {
-      if (fac.FAC_TYPE_ICON && !fac.FAC_TYPE_ICON.startsWith('http') && !fac.FAC_TYPE_ICON.startsWith('assets/')) {
+      if (
+        fac.FAC_TYPE_ICON &&
+        !fac.FAC_TYPE_ICON.startsWith("http") &&
+        !fac.FAC_TYPE_ICON.startsWith("assets/")
+      ) {
         fac.FAC_TYPE_ICON = `assets/icon/${fac.FAC_TYPE_ICON}`;
       }
       return fac;
@@ -3244,9 +3248,10 @@ export const rejectFacilityRequest_api = async (
   const fac_id = req.params.fac_id as string;
   try {
     await conn.beginTransaction();
-    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`, [
-      fac_id,
-    ]);
+    await conn.execute(
+      `UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`,
+      [fac_id],
+    );
     await conn.commit();
     await clearCache("*__express__/api/dorms/facilities*");
     return res
@@ -3275,13 +3280,18 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     );
 
     await conn.beginTransaction();
-    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`, [
-      fac_id,
-    ]);
+    await conn.execute(
+      `UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`,
+      [fac_id],
+    );
     await conn.commit();
 
     // ลบรูปออกจาก Storage หลังจากลบในฐานข้อมูลเสร็จแล้ว
-    if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON && facRows[0]!.FAC_TYPE_ICON.startsWith('http')) {
+    if (
+      facRows.length > 0 &&
+      facRows[0]!.FAC_TYPE_ICON &&
+      facRows[0]!.FAC_TYPE_ICON.startsWith("http")
+    ) {
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
     await clearCache("*__express__/api/dorms/facilities*");
@@ -3320,7 +3330,8 @@ export const updateMasterType = async (req: Request, res: Response) => {
       case "bed":
         query = "UPDATE BED_TYPES SET BED_TYPE_NAME = ? WHERE BED_TYPE_ID = ?";
         params = [name.toString().trim(), id];
-        checkQuery = "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? AND BED_TYPE_ID != ? LIMIT 1";
+        checkQuery =
+          "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? AND BED_TYPE_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "ประเภทเตียงนี้ถูกใช้งานแล้ว";
         break;
@@ -3328,7 +3339,8 @@ export const updateMasterType = async (req: Request, res: Response) => {
         query =
           "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
         params = [name.toString().trim(), id];
-        checkQuery = "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? AND DORM_TYPE_ID != ? LIMIT 1";
+        checkQuery =
+          "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? AND DORM_TYPE_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "ประเภทหอพักนี้ถูกใช้งานแล้ว";
         break;
@@ -3336,7 +3348,8 @@ export const updateMasterType = async (req: Request, res: Response) => {
         query =
           "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
         params = [name.toString().trim(), id];
-        checkQuery = "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? AND DORM_STATUS_ID != ? LIMIT 1";
+        checkQuery =
+          "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? AND DORM_STATUS_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "สถานะหอพักนี้ถูกใช้งานแล้ว";
         break;
@@ -3344,7 +3357,8 @@ export const updateMasterType = async (req: Request, res: Response) => {
         query =
           "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
         params = [name.toString().trim(), id];
-        checkQuery = "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? AND PRICE_TYPE_ID != ? LIMIT 1";
+        checkQuery =
+          "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? AND PRICE_TYPE_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "ประเภทราคานี้ถูกใช้งานแล้ว";
         break;
@@ -3352,7 +3366,8 @@ export const updateMasterType = async (req: Request, res: Response) => {
         query =
           "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
         params = [name.toString().trim(), id];
-        checkQuery = "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? AND ROOM_TYPE_ID != ? LIMIT 1";
+        checkQuery =
+          "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? AND ROOM_TYPE_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "ประเภทห้องนี้ถูกใช้งานแล้ว";
         break;
@@ -3371,8 +3386,14 @@ export const updateMasterType = async (req: Request, res: Response) => {
             : 500;
         query =
           "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?), RADIUS = ? WHERE ZONE_ID = ?";
-        params = [name.toString().trim(), `POINT(${latitude} ${longitude})`, r, id];
-        checkQuery = "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? AND ZONE_ID != ? LIMIT 1";
+        params = [
+          name.toString().trim(),
+          `POINT(${latitude} ${longitude})`,
+          r,
+          id,
+        ];
+        checkQuery =
+          "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? AND ZONE_ID != ? LIMIT 1";
         checkParams = [name.toString().trim(), id];
         dupMessage = "โซนหอพักนี้ถูกใช้งานแล้ว";
         break;
