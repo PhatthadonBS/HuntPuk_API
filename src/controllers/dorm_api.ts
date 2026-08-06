@@ -580,7 +580,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
     conn.commit();
     if (result.affectedRows > 0) {
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
       return res
         .status(201)
         .json({ success: true, message: "เพิ่มสิ่งอำนวยความสะดวกสำเร็จ" });
@@ -801,7 +801,12 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+          });
       }
       insertedRoomNames.add(roomName);
 
@@ -826,7 +831,12 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+          });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -992,7 +1002,7 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
           "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND FAC_TYPE_ICON IS NULL ORDER BY FAC_TYPE_ID DESC LIMIT 1",
           [facIconUrl, userRows[0]!.USER_ID],
         );
-        await clearCache('*__express__/api/dorms/facilities*');
+        await clearCache("*__express__/api/dorms/facilities*");
       }
     }
 
@@ -1231,7 +1241,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
           [dormId, newFacId],
         );
       }
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
     }
 
     if (uploadedUrls["OTHER_IMG"]) {
@@ -1277,7 +1287,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+          });
       }
       insertedRoomNames.add(roomName);
 
@@ -1302,7 +1317,12 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+          });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -1498,7 +1518,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
           [dormId, newFacId],
         );
       }
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
     }
 
     // Handle Custom Facility Image (if applicable)
@@ -1510,7 +1530,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
           "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND (FAC_TYPE_ICON IS NULL OR FAC_TYPE_ICON = '') ORDER BY FAC_TYPE_ID DESC LIMIT 1",
           [facIconUrl, reqUserId],
         );
-        await clearCache('*__express__/api/dorms/facilities*');
+        await clearCache("*__express__/api/dorms/facilities*");
       }
     }
 
@@ -1692,7 +1712,10 @@ export const updateRoomTypes_fn = async (
 
     if (insertedRoomNames.has(roomName)) {
       await conn.rollback();
-      return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+      return {
+        success: false,
+        message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+      };
     }
     insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
@@ -1963,7 +1986,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
           .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
       }
 
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
 
       res.json({
         success: true,
@@ -2590,7 +2613,7 @@ export const updateFacility_api = async (req: Request, res: Response) => {
       [...values, fac_id],
     );
     if (facs.affectedRows > 0) {
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
       return res.status(201).json({ url: iconUrl });
     }
   } catch (error: any) {
@@ -2872,7 +2895,7 @@ export const addDormType = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/dormTypes*');
+    await clearCache("*__express__/api/dorms/dormTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2882,7 +2905,7 @@ export const deleteDormType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_TYPES WHERE DORM_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/dormTypes*');
+    await clearCache("*__express__/api/dorms/dormTypes*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2905,7 +2928,7 @@ export const addRoomType = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/roomTypes*');
+    await clearCache("*__express__/api/dorms/roomTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2915,7 +2938,7 @@ export const deleteRoomType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM ROOM_TYPES WHERE ROOM_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/roomTypes*');
+    await clearCache("*__express__/api/dorms/roomTypes*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2938,7 +2961,7 @@ export const addBedType = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/bedTypes*');
+    await clearCache("*__express__/api/dorms/bedTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2948,7 +2971,7 @@ export const deleteBedType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM BED_TYPES WHERE BED_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/bedTypes*');
+    await clearCache("*__express__/api/dorms/bedTypes*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2982,7 +3005,7 @@ export const addPriceType = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/priceTypes*');
+    await clearCache("*__express__/api/dorms/priceTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2994,7 +3017,7 @@ export const deletePriceType = async (req: Request, res: Response) => {
     await dbcon.execute("DELETE FROM PRICE_TYPES WHERE PRICE_TYPE_ID = ?", [
       id,
     ]);
-    await clearCache('*__express__/api/dorms/priceTypes*');
+    await clearCache("*__express__/api/dorms/priceTypes*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -3028,7 +3051,7 @@ export const addDormStatus = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/dormStatuses*');
+    await clearCache("*__express__/api/dorms/dormStatuses*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3040,7 +3063,7 @@ export const deleteDormStatus = async (req: Request, res: Response) => {
     await dbcon.execute("DELETE FROM DORM_STATUSES WHERE DORM_STATUS_ID = ?", [
       id,
     ]);
-    await clearCache('*__express__/api/dorms/dormStatuses*');
+    await clearCache("*__express__/api/dorms/dormStatuses*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -3060,7 +3083,10 @@ export const addDormZone = async (req: Request, res: Response) => {
       lat !== undefined && lat !== null && lat !== "" ? Number(lat) : 13.7563;
     const longitude =
       lng !== undefined && lng !== null && lng !== "" ? Number(lng) : 100.5018;
-    const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
+    const r =
+      radius !== undefined && radius !== null && radius !== ""
+        ? Number(radius)
+        : 500;
 
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES, RADIUS) VALUES (?, ST_GeomFromText(?), ?)",
@@ -3071,7 +3097,7 @@ export const addDormZone = async (req: Request, res: Response) => {
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/zones*');
+    await clearCache("*__express__/api/dorms/zones*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3081,7 +3107,7 @@ export const deleteDormZone = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_ZONES WHERE ZONE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/zones*');
+    await clearCache("*__express__/api/dorms/zones*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -3119,7 +3145,7 @@ export const approveFacilityRequest_api = async (
       [fac_id],
     );
     await conn.commit();
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res.status(200).json({ success: true, message: "อนุมัติสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
@@ -3148,7 +3174,7 @@ export const rejectFacilityRequest_api = async (
       fac_id,
     ]);
     await conn.commit();
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res
       .status(200)
       .json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
@@ -3187,7 +3213,7 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON) {
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res
       .status(200)
       .json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
@@ -3250,7 +3276,10 @@ export const updateMasterType = async (req: Request, res: Response) => {
           lng !== undefined && lng !== null && lng !== ""
             ? Number(lng)
             : 100.5018;
-        const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
+        const r =
+          radius !== undefined && radius !== null && radius !== ""
+            ? Number(radius)
+            : 500;
         query =
           "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?), RADIUS = ? WHERE ZONE_ID = ?";
         params = [name, `POINT(${latitude} ${longitude})`, r, id];
@@ -3262,7 +3291,7 @@ export const updateMasterType = async (req: Request, res: Response) => {
     }
 
     await dbcon.execute(query, params);
-    
+
     let cachePath = "";
     if (type === "bed") cachePath = "bedTypes";
     else if (type === "dorm") cachePath = "dormTypes";
