@@ -580,7 +580,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
     );
     conn.commit();
     if (result.affectedRows > 0) {
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
       return res
         .status(201)
         .json({ success: true, message: "เพิ่มสิ่งอำนวยความสะดวกสำเร็จ" });
@@ -801,7 +801,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
       insertedRoomNames.add(roomName);
 
@@ -826,7 +829,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -992,7 +998,7 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
           "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND FAC_TYPE_ICON IS NULL ORDER BY FAC_TYPE_ID DESC LIMIT 1",
           [facIconUrl, userRows[0]!.USER_ID],
         );
-        await clearCache('*__express__/api/dorms/facilities*');
+        await clearCache("*__express__/api/dorms/facilities*");
       }
     }
 
@@ -1231,7 +1237,7 @@ export const createDorm_api = async (req: Request, res: Response) => {
           [dormId, newFacId],
         );
       }
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
     }
 
     if (uploadedUrls["OTHER_IMG"]) {
@@ -1277,7 +1283,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
       insertedRoomNames.add(roomName);
 
@@ -1302,7 +1311,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -1498,7 +1510,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
           [dormId, newFacId],
         );
       }
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
     }
 
     // Handle Custom Facility Image (if applicable)
@@ -1510,7 +1522,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
           "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND (FAC_TYPE_ICON IS NULL OR FAC_TYPE_ICON = '') ORDER BY FAC_TYPE_ID DESC LIMIT 1",
           [facIconUrl, reqUserId],
         );
-        await clearCache('*__express__/api/dorms/facilities*');
+        await clearCache("*__express__/api/dorms/facilities*");
       }
     }
 
@@ -1691,7 +1703,11 @@ export const updateRoomTypes_fn = async (
     let roomName = room.roomType.trim();
 
     if (insertedRoomNames.has(roomName)) {
-      throw new Error(`ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`);
+      await conn.rollback();
+      return {
+        success: false,
+        message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+      };
     }
     insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
@@ -1962,7 +1978,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
           .json({ success: false, message: "ไม่พบข้อมูลหอพักนี้ในระบบ" });
       }
 
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
 
       res.json({
         success: true,
@@ -2591,7 +2607,7 @@ export const updateFacility_api = async (req: Request, res: Response) => {
       [...values, fac_id],
     );
     if (facs.affectedRows > 0) {
-      await clearCache('*__express__/api/dorms/facilities*');
+      await clearCache("*__express__/api/dorms/facilities*");
       return res.status(201).json({ url: iconUrl });
     }
   } catch (error: any) {
@@ -2863,17 +2879,30 @@ export const addDormType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
+
+    const [dormData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_TYPES (DORM_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทหอพักสำเร็จ",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/dormTypes*');
+    await clearCache("*__express__/api/dorms/dormTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2883,8 +2912,8 @@ export const deleteDormType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_TYPES WHERE DORM_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/dormTypes*');
-    res.json({ success: true, message: "Deleted successfully" });
+    await clearCache("*__express__/api/dorms/dormTypes*");
+    res.json({ success: true, message: "ลบประเภทหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2896,17 +2925,30 @@ export const addRoomType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
+
+    const [dormData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทห้องนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทห้องสำเร็จ",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/roomTypes*');
+    await clearCache("*__express__/api/dorms/roomTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2915,9 +2957,10 @@ export const addRoomType = async (req: Request, res: Response) => {
 export const deleteRoomType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     await dbcon.execute("DELETE FROM ROOM_TYPES WHERE ROOM_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/roomTypes*');
-    res.json({ success: true, message: "Deleted successfully" });
+    await clearCache("*__express__/api/dorms/roomTypes*");
+    res.json({ success: true, message: "ลบประเภทห้องสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2929,17 +2972,30 @@ export const addBedType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทเตียง" });
+
+    const [bedTypeData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (bedTypeData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทเตียงนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO BED_TYPES (BED_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
       message: "Added successfully",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/bedTypes*');
+    await clearCache("*__express__/api/dorms/bedTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2949,7 +3005,7 @@ export const deleteBedType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM BED_TYPES WHERE BED_TYPE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/bedTypes*');
+    await clearCache("*__express__/api/dorms/bedTypes*");
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -2973,17 +3029,30 @@ export const addPriceType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทราคา" });
+
+    const [priceTypeData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (priceTypeData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทราคานี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO PRICE_TYPES (PRICE_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทราคาสำเร็จ",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/priceTypes*');
+    await clearCache("*__express__/api/dorms/priceTypes*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2995,8 +3064,8 @@ export const deletePriceType = async (req: Request, res: Response) => {
     await dbcon.execute("DELETE FROM PRICE_TYPES WHERE PRICE_TYPE_ID = ?", [
       id,
     ]);
-    await clearCache('*__express__/api/dorms/priceTypes*');
-    res.json({ success: true, message: "Deleted successfully" });
+    await clearCache("*__express__/api/dorms/priceTypes*");
+    res.json({ success: true, message: "ลบประเภทราคาสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3019,17 +3088,30 @@ export const addDormStatus = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อสถานะหอพัก" });
+
+    const [dormStatusData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormStatusData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "สถานะหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_STATUSES (DORM_STATUS_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มสถานะหอพักสำเร็จ",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/dormStatuses*');
+    await clearCache("*__express__/api/dorms/dormStatuses*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3041,8 +3123,8 @@ export const deleteDormStatus = async (req: Request, res: Response) => {
     await dbcon.execute("DELETE FROM DORM_STATUSES WHERE DORM_STATUS_ID = ?", [
       id,
     ]);
-    await clearCache('*__express__/api/dorms/dormStatuses*');
-    res.json({ success: true, message: "Deleted successfully" });
+    await clearCache("*__express__/api/dorms/dormStatuses*");
+    res.json({ success: true, message: "ลบสถานะหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3054,14 +3136,28 @@ export const addDormZone = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Zone name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อโซนหอพัก" });
 
-    // Default coordinates if not provided (Bangkok defaults)
+    const [dormZoneData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormZoneData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "โซนหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const latitude =
       lat !== undefined && lat !== null && lat !== "" ? Number(lat) : 13.7563;
     const longitude =
       lng !== undefined && lng !== null && lng !== "" ? Number(lng) : 100.5018;
-    const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
+    const r =
+      radius !== undefined && radius !== null && radius !== ""
+        ? Number(radius)
+        : 500;
 
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_ZONES (ZONE_NAME, COORDINATES, RADIUS) VALUES (?, ST_GeomFromText(?), ?)",
@@ -3069,10 +3165,10 @@ export const addDormZone = async (req: Request, res: Response) => {
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มโซนหอพักสำเร็จ",
       id: result.insertId,
     });
-    await clearCache('*__express__/api/dorms/zones*');
+    await clearCache("*__express__/api/dorms/zones*");
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3082,8 +3178,8 @@ export const deleteDormZone = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_ZONES WHERE ZONE_ID = ?", [id]);
-    await clearCache('*__express__/api/dorms/zones*');
-    res.json({ success: true, message: "Deleted successfully" });
+    await clearCache("*__express__/api/dorms/zones*");
+    res.json({ success: true, message: "ลบโซนหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3126,7 +3222,7 @@ export const approveFacilityRequest_api = async (
       [fac_id],
     );
     await conn.commit();
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res.status(200).json({ success: true, message: "อนุมัติสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
@@ -3152,7 +3248,7 @@ export const rejectFacilityRequest_api = async (
       fac_id,
     ]);
     await conn.commit();
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res
       .status(200)
       .json({ success: true, message: "ปฏิเสธคำร้องขอสำเร็จ" });
@@ -3188,7 +3284,7 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON && facRows[0]!.FAC_TYPE_ICON.startsWith('http')) {
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
-    await clearCache('*__express__/api/dorms/facilities*');
+    await clearCache("*__express__/api/dorms/facilities*");
     return res
       .status(200)
       .json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
@@ -3212,35 +3308,53 @@ export const updateMasterType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภท" });
 
     let query = "";
     let params: any[] = [];
+    let checkQuery = "";
+    let checkParams: any[] = [];
+    let dupMessage = "";
 
     switch (type) {
       case "bed":
         query = "UPDATE BED_TYPES SET BED_TYPE_NAME = ? WHERE BED_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? AND BED_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทเตียงนี้ถูกใช้งานแล้ว";
         break;
       case "dorm":
         query =
           "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? AND DORM_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทหอพักนี้ถูกใช้งานแล้ว";
         break;
       case "status":
         query =
           "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? AND DORM_STATUS_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "สถานะหอพักนี้ถูกใช้งานแล้ว";
         break;
       case "price":
         query =
           "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? AND PRICE_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทราคานี้ถูกใช้งานแล้ว";
         break;
       case "room":
         query =
           "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? AND ROOM_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทห้องนี้ถูกใช้งานแล้ว";
         break;
       case "zone":
         const latitude =
@@ -3251,19 +3365,38 @@ export const updateMasterType = async (req: Request, res: Response) => {
           lng !== undefined && lng !== null && lng !== ""
             ? Number(lng)
             : 100.5018;
-        const r = radius !== undefined && radius !== null && radius !== "" ? Number(radius) : 500;
+        const r =
+          radius !== undefined && radius !== null && radius !== ""
+            ? Number(radius)
+            : 500;
         query =
           "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?), RADIUS = ? WHERE ZONE_ID = ?";
-        params = [name, `POINT(${latitude} ${longitude})`, r, id];
+        params = [name.toString().trim(), `POINT(${latitude} ${longitude})`, r, id];
+        checkQuery = "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? AND ZONE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "โซนหอพักนี้ถูกใช้งานแล้ว";
         break;
       default:
         return res
           .status(400)
-          .json({ success: false, message: "Invalid type" });
+          .json({ success: false, message: "ประเภทข้อมูลไม่ถูกต้อง" });
+    }
+
+    if (checkQuery) {
+      const [dupData] = await dbcon.query<RowDataPacket[]>(
+        checkQuery,
+        checkParams,
+      );
+      if (dupData.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: dupMessage,
+        });
+      }
     }
 
     await dbcon.execute(query, params);
-    
+
     let cachePath = "";
     if (type === "bed") cachePath = "bedTypes";
     else if (type === "dorm") cachePath = "dormTypes";
@@ -3273,7 +3406,7 @@ export const updateMasterType = async (req: Request, res: Response) => {
     else if (type === "zone") cachePath = "zones";
     if (cachePath) await clearCache(`*__express__/api/dorms/${cachePath}*`);
 
-    res.json({ success: true, message: "Updated successfully" });
+    res.json({ success: true, message: "อัปเดตข้อมูลสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
