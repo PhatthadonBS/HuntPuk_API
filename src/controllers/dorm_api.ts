@@ -801,12 +801,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
       insertedRoomNames.add(roomName);
 
@@ -831,12 +829,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -1287,12 +1283,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
       if (insertedRoomNames.has(roomName)) {
         await conn.rollback();
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
       insertedRoomNames.add(roomName);
 
@@ -1317,12 +1311,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
       );
       if (existingDr.length > 0) {
         await conn.rollback();
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
+        });
       }
 
       const [drResult] = await conn.execute<ResultSetHeader>(
@@ -2885,14 +2877,27 @@ export const addDormType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
+
+    const [dormData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_TYPES (DORM_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทหอพักสำเร็จ",
       id: result.insertId,
     });
     await clearCache("*__express__/api/dorms/dormTypes*");
@@ -2906,7 +2911,7 @@ export const deleteDormType = async (req: Request, res: Response) => {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_TYPES WHERE DORM_TYPE_ID = ?", [id]);
     await clearCache("*__express__/api/dorms/dormTypes*");
-    res.json({ success: true, message: "Deleted successfully" });
+    res.json({ success: true, message: "ลบประเภทหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2918,14 +2923,27 @@ export const addRoomType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
+
+    const [dormData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทห้องนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO ROOM_TYPES (ROOM_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทห้องสำเร็จ",
       id: result.insertId,
     });
     await clearCache("*__express__/api/dorms/roomTypes*");
@@ -2937,9 +2955,10 @@ export const addRoomType = async (req: Request, res: Response) => {
 export const deleteRoomType = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     await dbcon.execute("DELETE FROM ROOM_TYPES WHERE ROOM_TYPE_ID = ?", [id]);
     await clearCache("*__express__/api/dorms/roomTypes*");
-    res.json({ success: true, message: "Deleted successfully" });
+    res.json({ success: true, message: "ลบประเภทห้องสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2951,10 +2970,23 @@ export const addBedType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทเตียง" });
+
+    const [bedTypeData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (bedTypeData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทเตียงนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO BED_TYPES (BED_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
@@ -2995,14 +3027,27 @@ export const addPriceType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภทราคา" });
+
+    const [priceTypeData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (priceTypeData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ประเภทราคานี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO PRICE_TYPES (PRICE_TYPE_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มประเภทราคาสำเร็จ",
       id: result.insertId,
     });
     await clearCache("*__express__/api/dorms/priceTypes*");
@@ -3018,7 +3063,7 @@ export const deletePriceType = async (req: Request, res: Response) => {
       id,
     ]);
     await clearCache("*__express__/api/dorms/priceTypes*");
-    res.json({ success: true, message: "Deleted successfully" });
+    res.json({ success: true, message: "ลบประเภทราคาสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3041,14 +3086,27 @@ export const addDormStatus = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อสถานะหอพัก" });
+
+    const [dormStatusData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormStatusData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "สถานะหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const [result] = await dbcon.execute<any>(
       "INSERT INTO DORM_STATUSES (DORM_STATUS_NAME) VALUES (?)",
-      [name],
+      [name.toString().trim()],
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มสถานะหอพักสำเร็จ",
       id: result.insertId,
     });
     await clearCache("*__express__/api/dorms/dormStatuses*");
@@ -3064,7 +3122,7 @@ export const deleteDormStatus = async (req: Request, res: Response) => {
       id,
     ]);
     await clearCache("*__express__/api/dorms/dormStatuses*");
-    res.json({ success: true, message: "Deleted successfully" });
+    res.json({ success: true, message: "ลบสถานะหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -3076,9 +3134,20 @@ export const addDormZone = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Zone name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อโซนหอพัก" });
 
-    // Default coordinates if not provided (Bangkok defaults)
+    const [dormZoneData] = await dbcon.query<RowDataPacket[]>(
+      "SELECT * as COUNT FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
+      [name.toString().trim()],
+    );
+
+    if (dormZoneData.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "โซนหอพักนี้ถูกใช้งานแล้ว",
+      });
+    }
+
     const latitude =
       lat !== undefined && lat !== null && lat !== "" ? Number(lat) : 13.7563;
     const longitude =
@@ -3094,7 +3163,7 @@ export const addDormZone = async (req: Request, res: Response) => {
     );
     res.json({
       success: true,
-      message: "Added successfully",
+      message: "เพิ่มโซนหอพักสำเร็จ",
       id: result.insertId,
     });
     await clearCache("*__express__/api/dorms/zones*");
@@ -3108,7 +3177,7 @@ export const deleteDormZone = async (req: Request, res: Response) => {
     const { id } = req.params;
     await dbcon.execute("DELETE FROM DORM_ZONES WHERE ZONE_ID = ?", [id]);
     await clearCache("*__express__/api/dorms/zones*");
-    res.json({ success: true, message: "Deleted successfully" });
+    res.json({ success: true, message: "ลบโซนหอพักสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
