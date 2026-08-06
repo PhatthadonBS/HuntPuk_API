@@ -1691,8 +1691,7 @@ export const updateRoomTypes_fn = async (
     let roomName = room.roomType.trim();
 
     if (insertedRoomNames.has(roomName)) {
-      await conn.rollback();
-      return res.status(400).json({ success: false, message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว` });
+      throw new Error(`ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`);
     }
     insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
@@ -2505,6 +2504,7 @@ export const getFacilities_api = async (req: Request, res: Response) => {
     const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 2`;
 
     const [facs] = await conn.query<RowDataPacket[]>(sql);
+    
     if (facs.length > 0) {
       return res.status(200).json({ success: true, data: facs });
     } else {
@@ -2533,6 +2533,7 @@ export const getFacilitiesOfDorm_api = async (req: Request, res: Response) => {
     WHERE FD.DORM_ID = ? AND FT.STATUS = 2`;
 
     const [facs] = await conn.query<FacOfDormGetRes[]>(sql, [Number(dorm_id)]);
+    
     if (facs.length > 0) {
       return res.status(200).json(facs);
     } else {
@@ -3092,7 +3093,13 @@ export const getFacilityRequests_api = async (req: Request, res: Response) => {
   try {
     const sql = `SELECT * FROM FACILITIES_TYPES WHERE STATUS = 1`;
     const [facs] = await conn.query<RowDataPacket[]>(sql);
-    return res.status(200).json({ success: true, data: facs });
+    const formattedFacs = facs.map((fac: any) => {
+      if (fac.FAC_TYPE_ICON && !fac.FAC_TYPE_ICON.startsWith('http') && !fac.FAC_TYPE_ICON.startsWith('assets/')) {
+        fac.FAC_TYPE_ICON = `assets/icon/${fac.FAC_TYPE_ICON}`;
+      }
+      return fac;
+    });
+    return res.status(200).json({ success: true, data: formattedFacs });
   } catch (error: any) {
     res
       .status(500)
@@ -3141,10 +3148,7 @@ export const rejectFacilityRequest_api = async (
   const fac_id = req.params.fac_id as string;
   try {
     await conn.beginTransaction();
-    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
-      fac_id,
-    ]);
-    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`, [
       fac_id,
     ]);
     await conn.commit();
@@ -3175,16 +3179,13 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     );
 
     await conn.beginTransaction();
-    await conn.execute(`DELETE FROM FACILITIES_DORMS WHERE FAC_TYPE_ID = ?`, [
-      fac_id,
-    ]);
-    await conn.execute(`DELETE FROM FACILITIES_TYPES WHERE FAC_TYPE_ID = ?`, [
+    await conn.execute(`UPDATE FACILITIES_TYPES SET STATUS = 0 WHERE FAC_TYPE_ID = ?`, [
       fac_id,
     ]);
     await conn.commit();
 
     // ลบรูปออกจาก Storage หลังจากลบในฐานข้อมูลเสร็จแล้ว
-    if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON) {
+    if (facRows.length > 0 && facRows[0]!.FAC_TYPE_ICON && facRows[0]!.FAC_TYPE_ICON.startsWith('http')) {
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
     await clearCache('*__express__/api/dorms/facilities*');

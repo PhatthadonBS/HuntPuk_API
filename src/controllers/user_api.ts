@@ -1587,3 +1587,26 @@ export async function OTP_Verify_fn(otp: string, email: string) {
     throw error;
   }
 }
+
+export const getMyDormOwnerReq_api = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId || (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    
+    const [ownerRows] = await dbcon.execute<any[]>(
+      "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
+      [userId]
+    );
+
+    if (ownerRows.length > 0) {
+      return res.status(200).json({ success: true, data: ownerRows[0] });
+    } else {
+      return res.status(404).json({ success: false, message: "No request found" });
+    }
+  } catch (error: any) {
+    console.error("getMyDormOwnerReq Error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

@@ -93,6 +93,11 @@ router.get(
   verifyToken,
   userController.getDormOwners_api,
 );
+router.get(
+  "/api/user/myDormOwnerReq",
+  verifyToken,
+  userController.getMyDormOwnerReq_api,
+);
 router.post(
   "/api/user/dormOwner",
   verifyToken,
