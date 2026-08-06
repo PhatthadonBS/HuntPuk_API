@@ -2926,7 +2926,7 @@ export const addRoomType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทหอพัก" });
 
     const [dormData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
+      "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -2973,7 +2973,7 @@ export const addBedType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทเตียง" });
 
     const [bedTypeData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
+      "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3030,7 +3030,7 @@ export const addPriceType = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อประเภทราคา" });
 
     const [priceTypeData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
+      "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3089,7 +3089,7 @@ export const addDormStatus = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อสถานะหอพัก" });
 
     const [dormStatusData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
+      "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3137,7 +3137,7 @@ export const addDormZone = async (req: Request, res: Response) => {
         .json({ success: false, message: "กรุณาระบุชื่อโซนหอพัก" });
 
     const [dormZoneData] = await dbcon.query<RowDataPacket[]>(
-      "SELECT DORM_TYPE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
+      "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? LIMIT 1",
       [name.toString().trim()],
     );
 
@@ -3306,35 +3306,53 @@ export const updateMasterType = async (req: Request, res: Response) => {
     if (!name)
       return res
         .status(400)
-        .json({ success: false, message: "Type name is required" });
+        .json({ success: false, message: "กรุณาระบุชื่อประเภท" });
 
     let query = "";
     let params: any[] = [];
+    let checkQuery = "";
+    let checkParams: any[] = [];
+    let dupMessage = "";
 
     switch (type) {
       case "bed":
         query = "UPDATE BED_TYPES SET BED_TYPE_NAME = ? WHERE BED_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT BED_TYPE_ID FROM BED_TYPES WHERE BED_TYPE_NAME = ? AND BED_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทเตียงนี้ถูกใช้งานแล้ว";
         break;
       case "dorm":
         query =
           "UPDATE DORM_TYPES SET DORM_TYPE_NAME = ? WHERE DORM_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT DORM_TYPE_ID FROM DORM_TYPES WHERE DORM_TYPE_NAME = ? AND DORM_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทหอพักนี้ถูกใช้งานแล้ว";
         break;
       case "status":
         query =
           "UPDATE DORM_STATUSES SET DORM_STATUS_NAME = ? WHERE DORM_STATUS_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT DORM_STATUS_ID FROM DORM_STATUSES WHERE DORM_STATUS_NAME = ? AND DORM_STATUS_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "สถานะหอพักนี้ถูกใช้งานแล้ว";
         break;
       case "price":
         query =
           "UPDATE PRICE_TYPES SET PRICE_TYPE_NAME = ? WHERE PRICE_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME = ? AND PRICE_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทราคานี้ถูกใช้งานแล้ว";
         break;
       case "room":
         query =
           "UPDATE ROOM_TYPES SET ROOM_TYPE_NAME = ? WHERE ROOM_TYPE_ID = ?";
-        params = [name, id];
+        params = [name.toString().trim(), id];
+        checkQuery = "SELECT ROOM_TYPE_ID FROM ROOM_TYPES WHERE ROOM_TYPE_NAME = ? AND ROOM_TYPE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "ประเภทห้องนี้ถูกใช้งานแล้ว";
         break;
       case "zone":
         const latitude =
@@ -3351,12 +3369,28 @@ export const updateMasterType = async (req: Request, res: Response) => {
             : 500;
         query =
           "UPDATE DORM_ZONES SET ZONE_NAME = ?, COORDINATES = ST_GeomFromText(?), RADIUS = ? WHERE ZONE_ID = ?";
-        params = [name, `POINT(${latitude} ${longitude})`, r, id];
+        params = [name.toString().trim(), `POINT(${latitude} ${longitude})`, r, id];
+        checkQuery = "SELECT ZONE_ID FROM DORM_ZONES WHERE ZONE_NAME = ? AND ZONE_ID != ? LIMIT 1";
+        checkParams = [name.toString().trim(), id];
+        dupMessage = "โซนหอพักนี้ถูกใช้งานแล้ว";
         break;
       default:
         return res
           .status(400)
-          .json({ success: false, message: "Invalid type" });
+          .json({ success: false, message: "ประเภทข้อมูลไม่ถูกต้อง" });
+    }
+
+    if (checkQuery) {
+      const [dupData] = await dbcon.query<RowDataPacket[]>(
+        checkQuery,
+        checkParams,
+      );
+      if (dupData.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: dupMessage,
+        });
+      }
     }
 
     await dbcon.execute(query, params);
@@ -3370,7 +3404,7 @@ export const updateMasterType = async (req: Request, res: Response) => {
     else if (type === "zone") cachePath = "zones";
     if (cachePath) await clearCache(`*__express__/api/dorms/${cachePath}*`);
 
-    res.json({ success: true, message: "Updated successfully" });
+    res.json({ success: true, message: "อัปเดตข้อมูลสำเร็จ" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
