@@ -231,8 +231,9 @@ export const login = async (req: Request, res: Response) => {
     });
   }
   const { email, password } = validationResult.data;
-  // รับค่า rememberMe จาก body (ถ้าไม่ส่งมา default = false)
-  const rememberMe = req.body.rememberMe === true;
+  // รับค่า rememberMe จาก query param หรือ body
+  const rememberMe =
+    req.query.rememberMe === "true" || req.body.rememberMe === true;
   const conn = await dbcon.getConnection();
   try {
     const [user] = await conn.query<UserDataPostRes[]>(
@@ -1594,16 +1595,18 @@ export const getMyDormOwnerReq_api = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-    
+
     const [ownerRows] = await dbcon.execute<any[]>(
       "SELECT * FROM DORM_OWNERS WHERE USER_ID = ?",
-      [userId]
+      [userId],
     );
 
     if (ownerRows.length > 0) {
       return res.status(200).json({ success: true, data: ownerRows[0] });
     } else {
-      return res.status(404).json({ success: false, message: "No request found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No request found" });
     }
   } catch (error: any) {
     console.error("getMyDormOwnerReq Error:", error);
