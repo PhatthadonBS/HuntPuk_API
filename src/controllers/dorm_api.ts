@@ -3232,7 +3232,7 @@ export const approveFacilityRequest_api = async (
   try {
     await conn.beginTransaction();
     await conn.execute(
-      `UPDATE FACILITIES_TYPES SET STATUS = 1 WHERE FAC_TYPE_ID = ?`,
+      `UPDATE FACILITIES_TYPES SET STATUS = 2 WHERE FAC_TYPE_ID = ?`,
       [fac_id],
     );
     await conn.execute(
