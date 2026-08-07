@@ -371,7 +371,6 @@ export const getDormById = async (req: Request, res: Response) => {
       icon: f.FAC_TYPE_ICON as string,
     }));
 
-    // 🌟 แก้ไขจุดที่ 3: เพิ่มการดึงราคารายวัน (perDay) และประเภทเตียงจากฐานข้อมูล
     const [rooms] = await dbcon.query<RowDataPacket[]>(
       `
         SELECT 
@@ -629,7 +628,7 @@ export const createDormMB_api = async (req: Request, res: Response) => {
   const tokenUserId = (req as any).user?.id;
   const tokenUserRole = (req as any).user?.role;
   const {
-    user_id, // Still accept it but prioritize tokenUserId
+    user_id,
     name,
     address,
     lat,
@@ -2432,6 +2431,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
     }
 
     await conn.commit();
+    await clearCache("*__express__/api/dorms*");
 
     const subject = `แจ้งผลการพิจารณาลงทะเบียนหอพัก "${dormName}"`;
     let content = "";
@@ -3280,11 +3280,11 @@ export const approveFacilityRequest_api = async (
       [fac_id],
     );
     await conn.execute(
-      `UPDATE FACILITIES_DORMS SET STATUS = 1 WHERE FAC_TYPE_ID = ?`,
+      `UPDATE FACILITIES_DORMS SET STATUS = 2 WHERE FAC_TYPE_ID = ?`,
       [fac_id],
     );
     await conn.commit();
-    await clearCache("*__express__/api/dorms/facilities*");
+    await clearCache("*__express__/api/dorms*");
     return res.status(200).json({ success: true, message: "อนุมัติสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
@@ -3329,7 +3329,7 @@ export const rejectFacilityRequest_api = async (
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
 
-    await clearCache("*__express__/api/dorms/facilities*");
+    await clearCache("*__express__/api/dorms*");
     return res
       .status(200)
       .json({ success: true, message: "ปฏิเสธคำร้องขอและลบข้อมูลสำเร็จ" });
@@ -3372,7 +3372,7 @@ export const deleteFacility_api = async (req: Request, res: Response) => {
     ) {
       await deleteFromGCS(facRows[0]!.FAC_TYPE_ICON);
     }
-    await clearCache("*__express__/api/dorms/facilities*");
+    await clearCache("*__express__/api/dorms*");
     return res
       .status(200)
       .json({ success: true, message: "ลบสิ่งอำนวยความสะดวกสำเร็จ" });
