@@ -2468,7 +2468,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
 };
 
 export const cancelDormRequest_api = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
+  const userId = (req as any).user?.id;
   const dormId = req.params.id;
   
   if (!dormId) return res.status(400).json("ไม่ได้ระบุไอดีหอพัก");
