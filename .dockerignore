@@ -1,0 +1,12 @@
+# ไม่เอา dependencies จากเครื่องเรา
+node_modules
+npm-debug.log
+
+# ไม่เอาไฟล์ build เก่าๆ จากเครื่องเรา
+dist
+build
+
+# ไม่เอาไฟล์ความลับและ source control
+.env
+.git
+.gitignore
