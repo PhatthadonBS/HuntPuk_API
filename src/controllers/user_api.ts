@@ -22,6 +22,7 @@ import {
   loginSchema,
 } from "../validations/auth.validation";
 import { DTOUserDormOwnerReqGetRes } from "../models/user.model";
+import { AuthRequest } from "../middlewares/auth_middleware";
 
 dotenv.config();
 
@@ -295,6 +296,66 @@ export const login = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  } finally {
+    conn.release();
+  }
+};
+
+export const refreshToken = async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "ไม่พบข้อมูลผู้ใช้" });
+  }
+
+  const conn = await dbcon.getConnection();
+  try {
+    const [user] = await conn.query<RowDataPacket[]>(
+      `SELECT USER_ID, USERNAME, EMAIL, PHONE_NUMBER, ROLE_TYPE_ID, ACCOUNT_STATUS 
+       FROM USERS WHERE USER_ID = ?`,
+      [userId]
+    );
+
+    if (!user || user.length === 0) {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลผู้ใช้" });
+    }
+
+    if (user[0]?.ACCOUNT_STATUS !== 1) {
+      return res.status(403).json({ success: false, message: "บัญชีผู้ใช้ถูกระงับ" });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
+    }
+
+    // Refresh Token valid for 1 day as requested
+    const token = jwt.sign(
+      {
+        id: user[0].USER_ID,
+        role: user[0].ROLE_TYPE_ID,
+        status: user[0].ACCOUNT_STATUS,
+      },
+      jwtSecret,
+      { expiresIn: "1d" }
+    );
+
+    res.json({
+      success: true,
+      message: "อัปเดต Token สำเร็จ",
+      token: token,
+      role: user[0].ROLE_TYPE_ID,
+      user: {
+        id: user[0].USER_ID,
+        username: user[0].USERNAME,
+        email: user[0].EMAIL,
+        phone: user[0].PHONE_NUMBER,
+        role_id: user[0].ROLE_TYPE_ID,
+        accout_status: user[0].ACCOUNT_STATUS,
+      },
+    });
+  } catch (error) {
+    console.error("Error in refreshToken:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   } finally {
     conn.release();
