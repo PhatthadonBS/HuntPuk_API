@@ -12,9 +12,6 @@ dist/
 service-account-key.json
 testApi.ts
 
-Dockerfile
-docker-compose.yml
-.dockerignore
 Huntpuk_API_context.txt
 src/controllers/testApi.ts
 GEMINI.md
