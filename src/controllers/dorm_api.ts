@@ -2467,6 +2467,43 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
   }
 };
 
+export const cancelDormRequest_api = async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const dormId = req.params.id;
+  
+  if (!dormId) return res.status(400).json("ไม่ได้ระบุไอดีหอพัก");
+
+  try {
+    // Check if the dorm belongs to this user and is pending (0 or 3)
+    const [dormInfo] = await dbcon.execute<RowDataPacket[]>(
+      `SELECT d.DORM_ID, d.REQ_STATUS 
+       FROM DORMITORIES d
+       JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
+       WHERE d.DORM_ID = ? AND do.USER_ID = ?`,
+      [dormId, userId],
+    );
+
+    if (dormInfo.length === 0) {
+      return res.status(404).json("ไม่พบหอพัก หรือคุณไม่มีสิทธิ์เข้าถึง");
+    }
+
+    if (dormInfo[0].REQ_STATUS !== 0 && dormInfo[0].REQ_STATUS !== 3) {
+      return res.status(400).json("ไม่สามารถยกเลิกได้เนื่องจากไม่ได้อยู่ในสถานะรอตรวจสอบ");
+    }
+
+    // Set REQ_STATUS to 4 (Draft/Editing)
+    await dbcon.execute<ResultSetHeader>(
+      "UPDATE DORMITORIES SET REQ_STATUS = 4, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?",
+      [dormId],
+    );
+
+    res.json({ success: true, message: "ยกเลิกคำขอเรียบร้อยแล้ว หอพักกลับสู่โหมดแบบร่าง" });
+  } catch (error: any) {
+    console.error("Cancel dorm request error:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการยกเลิกคำขอ" });
+  }
+};
+
 export const getPendingDormReq_api = async (req: Request, res: Response) => {
   try {
     const sql = `

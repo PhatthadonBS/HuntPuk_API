@@ -156,6 +156,12 @@ router.delete(
 );
 
 // ✅ Dormitory group
+router.put(
+  "/api/dorms/cancel-request/:id",
+  verifyToken,
+  requireRole(2),
+  dormController.cancelDormRequest_api,
+);
 router.get(
   "/api/dorms/pendingReq",
   verifyToken,
