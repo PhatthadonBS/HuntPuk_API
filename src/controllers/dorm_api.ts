@@ -999,7 +999,7 @@ export const uploadDormImagesMB_api = async (req: Request, res: Response) => {
          JOIN FACILITIES_DORMS fd ON ft.FAC_TYPE_ID = fd.FAC_TYPE_ID 
          WHERE fd.DORM_ID = ? AND (ft.FAC_TYPE_ICON IS NULL OR ft.FAC_TYPE_ICON = '') AND ft.ADD_BY = ?
          ORDER BY ft.FAC_TYPE_ID ASC`,
-        [dormId, addBy]
+        [dormId, addBy],
       );
 
       let cacheCleared = false;
@@ -2470,7 +2470,7 @@ export const approveDormReq_api = async (req: Request, res: Response) => {
 export const cancelDormRequest_api = async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
   const dormId = req.params.id;
-  
+
   if (!dormId) return res.status(400).json("ไม่ได้ระบุไอดีหอพัก");
 
   try {
@@ -2487,8 +2487,10 @@ export const cancelDormRequest_api = async (req: Request, res: Response) => {
       return res.status(404).json("ไม่พบหอพัก หรือคุณไม่มีสิทธิ์เข้าถึง");
     }
 
-    if (dormInfo[0].REQ_STATUS !== 0 && dormInfo[0].REQ_STATUS !== 3) {
-      return res.status(400).json("ไม่สามารถยกเลิกได้เนื่องจากไม่ได้อยู่ในสถานะรอตรวจสอบ");
+    if (dormInfo[0]?.REQ_STATUS !== 0 && dormInfo[0]?.REQ_STATUS !== 3) {
+      return res
+        .status(400)
+        .json("ไม่สามารถยกเลิกได้เนื่องจากไม่ได้อยู่ในสถานะรอตรวจสอบ");
     }
 
     // Set REQ_STATUS to 4 (Draft/Editing)
@@ -2497,10 +2499,15 @@ export const cancelDormRequest_api = async (req: Request, res: Response) => {
       [dormId],
     );
 
-    res.json({ success: true, message: "ยกเลิกคำขอเรียบร้อยแล้ว หอพักกลับสู่โหมดแบบร่าง" });
+    res.json({
+      success: true,
+      message: "ยกเลิกคำขอเรียบร้อยแล้ว หอพักกลับสู่โหมดแบบร่าง",
+    });
   } catch (error: any) {
     console.error("Cancel dorm request error:", error);
-    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการยกเลิกคำขอ" });
+    res
+      .status(500)
+      .json({ success: false, message: "เกิดข้อผิดพลาดในการยกเลิกคำขอ" });
   }
 };
 
