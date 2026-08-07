@@ -320,8 +320,8 @@ export const refreshToken = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "ไม่พบข้อมูลผู้ใช้" });
     }
 
-    if (user[0]?.ACCOUNT_STATUS !== 1) {
-      return res.status(403).json({ success: false, message: "บัญชีผู้ใช้ถูกระงับ" });
+    if (user[0]?.ACCOUNT_STATUS != 0) {
+      return res.status(403).json({ success: false, message: (user[0]?.ACCOUNT_STATUS == 1) ? "บัญชีผู้ใช้ถูกระงับ" : "บัญชีผู้ใช้ถูกระงับการเข้าถึง" });
     }
 
     const jwtSecret = process.env.JWT_SECRET;
