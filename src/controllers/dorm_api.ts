@@ -63,6 +63,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
+                d.VIEW_COUNT,
                 d.UPDATE_AT,
                 -- ✅ แก้: ดึงเฉพาะราคารายเดือน (PRICE_TYPE_ID = 1) เป็น start_price
                 -- ไม่ใช้ MIN(PRICE) ทั้งหมด เพราะรายวันอาจถูกกว่ารายเดือนทำให้ราคาผิด

@@ -1177,6 +1177,7 @@ export const getMyFavorites_api = async (req: Request, res: Response) => {
                 D.ADDRESS AS ADDRESS,
                 D.FRONT_DORM_IMAGE AS COVERIMAGE,
                 D.SCORE AS SCORE,
+                D.VIEW_COUNT,
                 DS.DORM_STATUS_NAME,
                 DZ.ZONE_NAME,
                 COALESCE(MIN(CASE WHEN RP.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN RP.PRICE ELSE NULL END), 0) AS START_PRICE
