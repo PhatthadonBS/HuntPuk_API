@@ -129,6 +129,11 @@ router.get(
 // auth group
 router.post("/api/auth/login", loginLimiter, userController.login);
 router.post(
+  "/api/auth/refresh-token",
+  verifyToken,
+  userController.refreshToken,
+);
+router.post(
   "/api/auth/SendOTP/register",
   strictLimiter,
   userController.OTP_Sender_Reg_api,
