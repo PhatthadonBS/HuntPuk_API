@@ -1552,6 +1552,33 @@ export const updateDorm_api = async (req: Request, res: Response) => {
       );
     }
 
+    if (body.deleted_room_images) {
+      let deletedRoomImages: string[] = [];
+      try {
+        deletedRoomImages = JSON.parse(body.deleted_room_images);
+      } catch (e) {}
+      
+      if (deletedRoomImages.length > 0) {
+        const [existingImages] = await conn.execute<RowDataPacket[]>(
+          "SELECT DORM_IMG_ID, IMAGE_PATH FROM DORM_IMAGES WHERE DORM_ID = ?",
+          [dormId],
+        );
+        for (const keyword of deletedRoomImages) {
+          const baseName = keyword.toLowerCase().replace("_img", "");
+          const oldImgs = existingImages.filter(
+            (img: any) =>
+              img.IMAGE_PATH && img.IMAGE_PATH.toLowerCase().includes(baseName),
+          );
+          for (const old of oldImgs) {
+            await deleteFromGCS(old.IMAGE_PATH);
+            await conn.execute("DELETE FROM DORM_IMAGES WHERE DORM_IMG_ID = ?", [
+              old.DORM_IMG_ID,
+            ]);
+          }
+        }
+      }
+    }
+
     await conn.commit();
     // Clear cache for this specific dorm so next load gets fresh data
     await clearCache(`*__express__/api/dorms/${dormId}*`);
