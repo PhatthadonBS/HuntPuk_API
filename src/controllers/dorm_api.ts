@@ -1458,6 +1458,7 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     if (Object.keys(files).length > 0) {
       uploadedUrls = await processAndUploadImages(files, dormId, ownerId);
     }
+    console.log("--- DEBUG updateDorm_api ---", "files:", Object.keys(files), "uploadedUrls:", uploadedUrls);
 
     if (
       ((req as any).user?.role === 1 || (req as any).user?.role === 3) &&
@@ -1608,6 +1609,7 @@ export const updateDormInfo_fn = async (
     "SELECT FRONT_DORM_IMAGE, DORM_LICENSE, REQ_STATUS FROM DORMITORIES WHERE DORM_ID = ?",
     [dormId],
   );
+  console.log("--- DEBUG updateDormInfo_fn ---", "oldData front img:", oldData[0]?.FRONT_DORM_IMAGE, "uploadedUrls:", uploadedUrls);
 
   if (oldData[0]?.REQ_STATUS === 2 || oldData[0]?.REQ_STATUS === 4) {
     sql += ", REQ_STATUS = 3";
