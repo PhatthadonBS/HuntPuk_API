@@ -400,7 +400,11 @@ router.put(
   imgTypeUploads,
   dormController.updateDorm_api,
 );
-router.get("/api/spec/dorm/:id", dormController.getDormsByOwner_api);
+router.get(
+  "/api/spec/dorm/:id",
+  verifyToken,
+  dormController.getDormsByOwner_api
+);
 router.delete(
   "/api/spec/review/:id",
   verifyToken,
