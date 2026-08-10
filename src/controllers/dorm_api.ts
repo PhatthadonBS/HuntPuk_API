@@ -1870,6 +1870,8 @@ export const updateGalleryImages_fn = async (
 
   // 3. Delete gallery images that are NOT in remainingGallery
   if (remainingGalleryJson !== undefined) {
+    // If remainingGalleryJson is completely empty string "", then JSON.parse throws.
+    // It should be evaluated to [] if we want to delete all.
     for (const dbImg of galleryImagesInDb) {
       if (!remainingGallery.includes(dbImg.IMAGE_PATH)) {
         await deleteFromGCS(dbImg.IMAGE_PATH);
