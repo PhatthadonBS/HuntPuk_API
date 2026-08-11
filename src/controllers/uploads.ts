@@ -66,7 +66,12 @@ export async function processAndUploadImages(
           reject(err);
         });
 
-        blobStream.on("finish", () => {
+        blobStream.on("finish", async () => {
+          try {
+            await blob.makePublic();
+          } catch (e) {
+            // Ignore if bucket has Uniform Bucket-Level Access enabled
+          }
           const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
           urlsForField.push(publicUrl);
           resolve();
