@@ -1583,6 +1583,8 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     await conn.commit();
     // Clear cache for this specific dorm so next load gets fresh data
     await clearCache(`*__express__/api/dorms/${dormId}*`);
+    await clearCache(`*__express__/api/spec/dorm/${dormId}*`);
+    await clearCache(`*__express__/api/dorms*`);
     res.json({ success: true, message: "อัปเดตข้อมูลหอพักสำเร็จ" });
   } catch (error: any) {
     await conn.rollback();
