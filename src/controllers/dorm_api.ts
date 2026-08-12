@@ -63,10 +63,11 @@ export const getAllDorms = async (req: Request, res: Response) => {
                 d.WATER_UNIT,
                 d.WATER_LUMP,
                 d.ELECT_UNIT,
-                d.VIEW_COUNT,
+                (
+                  COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+                  COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+                ) as VIEW_COUNT,
                 d.UPDATE_AT,
-                -- ✅ แก้: ดึงเฉพาะราคารายเดือน (PRICE_TYPE_ID = 1) เป็น start_price
-                -- ไม่ใช้ MIN(PRICE) ทั้งหมด เพราะรายวันอาจถูกกว่ารายเดือนทำให้ราคาผิด
                 MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END) as start_price
             FROM DORMITORIES d
             LEFT JOIN DORM_ZONES z ON d.ZONE_ID = z.ZONE_ID
@@ -213,7 +214,7 @@ export async function getDormById_fn(did: number, conn: PoolConnection) {
 
 export const getAllDorms_Admin = async (req: Request, res: Response) => {
   try {
-    // ✅ เพิ่มการ Join ตาราง Zone และ ราคา (DORM_ROOMS, ROOM_PRICES) เข้ามาด้วย
+
     const sql = `
       SELECT 
         d.DORM_ID, 
@@ -319,13 +320,16 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
   }
 };
 
-// --- 2. ดูรายละเอียดหอพัก 1 แห่ง (อัปเดตใหม่ ทนทานต่อการดึงรัวๆ) ---
 export const getDormById = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
     const sqlMain = `
       SELECT 
         d.*, 
+        (
+          COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+          COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+        ) as VIEW_COUNT,
         ST_X(d.COORDINATES) AS LAT,
         ST_Y(d.COORDINATES) AS LNG,
         dz.ZONE_NAME,
@@ -395,7 +399,6 @@ export const getDormById = async (req: Request, res: Response) => {
       [id],
     );
 
-    // 🌟 แก้ไขจุดที่ 4: คำนวณราคาเริ่มต้นที่ถูกต้อง (ตัด 0 บาททิ้ง)
     const validMonthlyPrices = rooms
       .map((r: any) => Number(r.perMonth || r.permonth || r.PERMONTH || 0))
       .filter((p: number) => p > 0);
@@ -506,7 +509,7 @@ export const getDormById = async (req: Request, res: Response) => {
 };
 export const getAllZones = async (req: Request, res: Response) => {
   try {
-    // ✅ เปลี่ยนจาก SELECT * เป็นการแกะ lat, lng ออกจากจุด POINT
+
     const sql = `
       SELECT 
         ZONE_ID, 
@@ -2201,7 +2204,10 @@ export const getDormsByOwner_api = async (req: Request, res: Response) => {
                     d.FRONT_DORM_IMAGE,
                     d.ADDRESS,
                     d.SCORE,
-                    d.VIEW_COUNT,
+                    (
+                      COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+                      COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+                    ) as VIEW_COUNT,
                     d.REQ_STATUS,       
                     d.DORM_STATUS_ID, 
                     ds.DORM_STATUS_NAME, 
@@ -2364,9 +2370,9 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
     const sortBy = req.query.sortBy === "views" ? "views" : "score";
 
     let orderClause =
-      "ORDER BY d.SCORE DESC, d.VIEW_COUNT DESC, fav_count DESC";
+      "ORDER BY d.SCORE DESC, VIEW_COUNT DESC, fav_count DESC";
     if (sortBy === "views") {
-      orderClause = "ORDER BY d.VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC";
+      orderClause = "ORDER BY VIEW_COUNT DESC, d.SCORE DESC, fav_count DESC";
     }
 
     const sql = `
@@ -2376,7 +2382,10 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.ADDRESS,
                   d.SCORE,
                   d.FRONT_DORM_IMAGE as image, 
-                  d.VIEW_COUNT,
+                  (
+                    COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+                    COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+                  ) as VIEW_COUNT,
                   d.UPDATE_AT as update_at,
                   d.ZONE_ID,
                   dz.ZONE_NAME as zone,
@@ -2398,7 +2407,7 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
               LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
               LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
               WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID IN (1, 3)
-              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.VIEW_COUNT, d.UPDATE_AT, d.ZONE_ID, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT
+              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, d.ZONE_ID, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT
               ${orderClause}
               LIMIT ?
     `;
@@ -2784,7 +2793,10 @@ export const getAllDormMB = async (req: Request, res: Response) => {
                     d.WATER_UNIT,
                     d.WATER_LUMP,
                     d.ELECT_UNIT,
-                    d.VIEW_COUNT
+                    (
+                      COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+                      COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+                    ) as VIEW_COUNT
                 FROM DORMITORIES d
                 LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
                 LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
@@ -2880,7 +2892,7 @@ export const getAllDormMB = async (req: Request, res: Response) => {
       }
     }
 
-    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT, d.VIEW_COUNT `;
+    sql += ` GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT `;
 
     const havingClauses = [];
     if (

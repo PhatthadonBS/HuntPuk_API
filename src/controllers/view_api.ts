@@ -65,11 +65,6 @@ export const recordDormView = async (req: Request, res: Response) => {
           [clientId, dormId],
         );
 
-        await conn.execute(
-          `UPDATE DORMITORIES SET VIEW_COUNT = VIEW_COUNT + 1 WHERE DORM_ID = ?`,
-          [dormId],
-        );
-
         await conn.commit();
       } catch (err) {
         await conn.rollback();
