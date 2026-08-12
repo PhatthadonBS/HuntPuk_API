@@ -542,22 +542,38 @@ export const addFacility_api = async (req: Request, res: Response) => {
       .json({ success: false, message: "ข้อมูลไม่ครบถ้วน" });
 
   try {
-    const user = await (await getUsers_fn()).filter((u) => u.USER_ID == uid);
-    if (user.length < 1)
-      return res
-        .status(404)
-        .json({ success: false, message: "ไม่พบผู้ใช้งาน" });
-
-    const [limitAdd] = await conn.execute<RowDataPacket[]>(
-      "SELECT COUNT(ADD_BY) count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
-      [uid],
+    let usernameString = "";
+    
+    // Query the database directly to get the user by ID and check their role
+    const [userRows] = await conn.execute<RowDataPacket[]>(
+      "SELECT USERNAME, USER_ID, ROLE_TYPE_ID FROM USERS WHERE USER_ID = ?",
+      [uid]
     );
 
-    if (limitAdd[0]!["count"] >= 3)
-      return res.status(200).json({
-        success: false,
-        message: "ขีดจำกัดในการเพิ่มสิ่งอำนวยความสะดวกเต็มแล้ว",
-      });
+    if (userRows.length < 1) {
+      return res.status(404).json({ success: false, message: "ไม่พบผู้ใช้งาน" });
+    }
+
+    const userData = userRows[0] as {ROLE_TYPE_ID?: number, USERNAME?: string, USER_ID?: number};
+    const isAdmin = userData["ROLE_TYPE_ID"] !== 1;
+    if (isAdmin) {
+      usernameString = "admin";
+    } else {
+      usernameString = `${userData["USERNAME"]}_${userData["USER_ID"]}`;
+    }
+
+    if (!isAdmin) {
+      const [limitAdd] = await conn.execute<RowDataPacket[]>(
+        "SELECT COUNT(ADD_BY) count FROM FACILITIES_TYPES WHERE ADD_BY = ?",
+        [uid],
+      );
+
+      if (limitAdd[0]!["count"] >= 3)
+        return res.status(200).json({
+          success: false,
+          message: "ขีดจำกัดในการเพิ่มสิ่งอำนวยความสะดวกเต็มแล้ว",
+        });
+    }
 
     const [dupFac] = await conn.execute<RowDataPacket[]>(
       "SELECT COUNT(FAC_TYPE_NAME) count FROM FACILITIES_TYPES WHERE FAC_TYPE_NAME = ?",
@@ -568,18 +584,19 @@ export const addFacility_api = async (req: Request, res: Response) => {
       return res
         .status(200)
         .json({ success: false, message: "ชื่อสิ่งอำนวยความสะดวกซ้ำ" });
+
     icon_url = await fileUpload(
       file,
       "users",
-      `${user[0]?.USERNAME}_${user[0]?.USER_ID}`,
+      usernameString,
       "icons",
       fac_name,
     );
 
     conn.beginTransaction();
     const [result] = await conn.execute<ResultSetHeader>(
-      "INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, ADD_BY) VALUES (? ,? ,?)",
-      [fac_name.toString().trim(), icon_url, uid],
+      "INSERT INTO FACILITIES_TYPES (FAC_TYPE_NAME, FAC_TYPE_ICON, ADD_BY, STATUS) VALUES (? ,? ,?, ?)",
+      [fac_name.toString().trim(), icon_url, uid, isAdmin ? 2 : 1],
     );
     conn.commit();
     if (result.affectedRows > 0) {
@@ -2018,7 +2035,7 @@ export const removeDorm_api = async (req: Request, res: Response) => {
       }
 
       const [result] = await conn.execute<ResultSetHeader>(
-        "UPDATE DORMITORIES SET DORM_STATUS_ID = 4 WHERE DORM_ID = ?",
+        "UPDATE DORMITORIES SET DORM_STATUS_ID = 4, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?",
         [id],
       );
 
@@ -2054,7 +2071,7 @@ export const restoreDorm_api = async (req: Request, res: Response) => {
 
   try {
     const [result] = await conn.execute<ResultSetHeader>(
-      "UPDATE DORMITORIES SET DORM_STATUS_ID = 1 WHERE DORM_ID = ?",
+      "UPDATE DORMITORIES SET DORM_STATUS_ID = 1, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?",
       [id],
     );
 
@@ -2729,7 +2746,7 @@ export const changeDormStatus_api = async (req: Request, res: Response) => {
 
   try {
     const [result] = await conn.execute<ResultSetHeader>(
-      "UPDATE DORMITORIES SET DORM_STATUS_ID = ? WHERE DORM_ID = ?",
+      "UPDATE DORMITORIES SET DORM_STATUS_ID = ?, UPDATE_AT = CURRENT_DATE() WHERE DORM_ID = ?",
       [status_id, id],
     );
 
