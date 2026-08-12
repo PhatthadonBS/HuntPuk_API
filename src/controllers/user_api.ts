@@ -1238,7 +1238,10 @@ export const getMyFavorites_api = async (req: Request, res: Response) => {
                 D.ADDRESS AS ADDRESS,
                 D.FRONT_DORM_IMAGE AS COVERIMAGE,
                 D.SCORE AS SCORE,
-                D.VIEW_COUNT,
+                (
+                  COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = D.DORM_ID), 0) + 
+                  COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = D.DORM_ID), 0)
+                ) as VIEW_COUNT,
                 DS.DORM_STATUS_NAME,
                 DZ.ZONE_NAME,
                 COALESCE(MIN(CASE WHEN RP.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN RP.PRICE ELSE NULL END), 0) AS START_PRICE
