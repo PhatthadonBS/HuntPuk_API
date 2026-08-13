@@ -21,7 +21,7 @@ const upload = multer({
 const router = express.Router();
 
 router.get("/api", (_req, res) => {
-  res.redirect("https://www.huntpuk.space");
+  res.send("Hi")
 });
 
 // View Statistics Routes
