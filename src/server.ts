@@ -87,17 +87,12 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 startMonthlyViewSummaryJob();
 
-connectRedis()
-  .then(() => {
-    app.listen(port, "0.0.0.0", () => {
-      console.log(`HuntPuk API started on port ${port}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to connect to Redis:", err);
-    app.listen(port, "0.0.0.0", () => {
-      console.log(
-        `HuntPuk API started on port ${port} (Redis disconnected)`,
-      );
-    });
-  });
+// Start HTTP server immediately to pass Railway/Cloud health checks
+app.listen(port, "0.0.0.0", () => {
+  console.log(`HuntPuk API started on port ${port}`);
+});
+
+// Connect Redis asynchronously in background
+connectRedis().catch((err) => {
+  console.error("Failed to connect to Redis:", err.message);
+});
