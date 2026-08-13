@@ -9,13 +9,22 @@ const clientEmail = process.env.GCP_CLIENT_EMAIL;
 function formatPrivateKey(key: string | undefined): string | undefined {
   if (!key) return undefined;
   
+  let k = key.trim();
+  
   // 1. Remove surrounding quotes if they exist (common in .env)
-  let k = key.replace(/^["']|["']$/g, "").trim();
+  if (k.startsWith('"') && k.endsWith('"')) {
+    k = k.substring(1, k.length - 1);
+  } else if (k.startsWith("'") && k.endsWith("'")) {
+    k = k.substring(1, k.length - 1);
+  }
 
-  // 2. Replace literal \n or \\n with actual newlines
-  k = k.replace(/\\\\n/g, "\n").replace(/\\n/g, "\n");
+  // 2. Unescape newlines (replace literal "\n" and "\\n" with actual newline)
+  k = k.split("\\\\n").join("\n").split("\\n").join("\n");
+  
+  // 3. Normalize \r\n to \n
+  k = k.split("\r\n").join("\n");
 
-  // 3. Fix cases where the key was flattened to a single line with spaces instead of newlines
+  // 4. Fix cases where the key was flattened to a single line with spaces
   if (k.includes("-----BEGIN PRIVATE KEY-----") && !k.includes("\n")) {
     k = k.replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n");
     k = k.replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");

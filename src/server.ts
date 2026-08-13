@@ -28,7 +28,9 @@ const allowedOrigins = [
   "https://www.huntpuk.space",
   "capacitor://localhost",
   "ionic://localhost",
-  "http://localhost"
+  "http://localhost",
+  "http://localhost:8100",
+  
 ];
 
 app.use(
