@@ -179,7 +179,6 @@ export const getAllDorms = async (req: Request, res: Response) => {
   }
 };
 
-// 🌟 ฟังก์ชันเสริม: คำนวณระยะทางจากเส้นละติจูด/ลองจิจูด (Haversine Formula) คืนค่าเป็นกิโลเมตร
 function calculateHaversineDistance(
   lat1: number,
   lon1: number,
@@ -812,21 +811,10 @@ export const createDormMB_api = async (req: Request, res: Response) => {
       return parseInt(n) || 1;
     };
 
-    const insertedRoomNames = new Set<string>();
-
     for (const room of roomTypesArr) {
       if (!room.roomType || room.roomType.trim() === "") continue;
 
       let roomName = room.roomType.trim();
-
-      if (insertedRoomNames.has(roomName)) {
-        await conn.rollback();
-        return res.status(400).json({
-          success: false,
-          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-        });
-      }
-      insertedRoomNames.add(roomName);
 
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
@@ -1240,7 +1228,8 @@ export const createDorm_api = async (req: Request, res: Response) => {
 
     const frontUrl = (uploadedUrls["FRONT_DORM_IMG"] as string) || "";
     const licenseUrl = (uploadedUrls["LICENSE_IMG"] as string) || "";
-
+    
+ 
     if (frontUrl || licenseUrl) {
       await conn.execute(
         `UPDATE DORMITORIES SET FRONT_DORM_IMAGE = ?, DORM_LICENSE = ? WHERE DORM_ID = ?`,
@@ -1308,21 +1297,10 @@ export const createDorm_api = async (req: Request, res: Response) => {
       return parseInt(n) || 1;
     };
 
-    const insertedRoomNames = new Set<string>();
-
     for (const room of roomTypesArr) {
       if (!room.roomType || room.roomType.trim() === "") continue;
 
       let roomName = room.roomType.trim();
-
-      if (insertedRoomNames.has(roomName)) {
-        await conn.rollback();
-        return res.status(400).json({
-          success: false,
-          message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-        });
-      }
-      insertedRoomNames.add(roomName);
 
       let roomTypeId;
       const [existingRt] = await conn.execute<RowDataPacket[]>(
@@ -1549,16 +1527,29 @@ export const updateDorm_api = async (req: Request, res: Response) => {
     }
 
     // Handle Custom Facility Image (if applicable)
-    const facIconUrl = (uploadedUrls["FACILITY_IMG"] as string) || "";
-    if (facIconUrl) {
-      const reqUserId = (req as any).user?.id || ownerRows[0]?.USER_ID;
-      if (reqUserId) {
-        await conn.execute(
-          "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE ADD_BY = ? AND (FAC_TYPE_ICON IS NULL OR FAC_TYPE_ICON = '') ORDER BY FAC_TYPE_ID DESC LIMIT 1",
-          [facIconUrl, reqUserId],
-        );
-        await clearCache("*__express__/api/dorms/facilities*");
+    const reqUserIdForFac = (req as any).user?.id || ownerRows[0]?.USER_ID;
+    if (reqUserIdForFac) {
+      const [facRows] = await conn.execute<RowDataPacket[]>(
+        `SELECT ft.FAC_TYPE_ID 
+         FROM FACILITIES_TYPES ft 
+         JOIN FACILITIES_DORMS fd ON ft.FAC_TYPE_ID = fd.FAC_TYPE_ID 
+         WHERE fd.DORM_ID = ? AND (ft.FAC_TYPE_ICON IS NULL OR ft.FAC_TYPE_ICON = '') AND ft.ADD_BY = ?
+         ORDER BY ft.FAC_TYPE_ID ASC`,
+        [dormId, reqUserIdForFac],
+      );
+
+      let cacheCleared = false;
+      for (let i = 0; i < 3; i++) {
+        const facIconUrl = (uploadedUrls[`FACILITY_IMG_${i}`] as string) || "";
+        if (facIconUrl && facRows[i]) {
+          await conn.execute(
+            "UPDATE FACILITIES_TYPES SET FAC_TYPE_ICON = ? WHERE FAC_TYPE_ID = ?",
+            [facIconUrl, facRows[i]!.FAC_TYPE_ID],
+          );
+          cacheCleared = true;
+        }
       }
+      if (cacheCleared) await clearCache("*__express__/api/dorms/facilities*");
     }
 
     if (Object.keys(uploadedUrls).length > 0 || body.remaining_gallery) {
@@ -1689,6 +1680,8 @@ export const updateDormInfo_fn = async (
 
   sql += " WHERE DORM_ID = ?";
   params.push(dormId);
+  console.log("🔥 FINAL SQL:", sql);
+  console.log("🔥 FINAL PARAMS:", params);
   await conn.execute(sql, params);
 };
 
@@ -1760,23 +1753,11 @@ export const updateRoomTypes_fn = async (
   // ลบตารางแม่ได้อย่างปลอดภัย
   await conn.execute(`DELETE FROM DORM_ROOMS WHERE DORM_ID = ?`, [dormId]);
 
-  // 🌟 พระเอกคนใหม่: ใช้ Set เพื่อเก็บ "ชื่อห้อง" แทน ID
-  const insertedRoomNames = new Set<string>();
-
   // 2. สร้างโครงสร้างห้องพักเข้าไปใหม่
   for (const room of roomTypes) {
     if (!room.roomType || room.roomType.trim() === "") continue; // ข้ามถ้าไม่ได้กรอกชื่อ
 
     let roomName = room.roomType.trim();
-
-    if (insertedRoomNames.has(roomName)) {
-      await conn.rollback();
-      return {
-        success: false,
-        message: `ประเภทห้องพัก "${roomName}" มีอยู่แล้ว`,
-      };
-    }
-    insertedRoomNames.add(roomName); // จำชื่อไว้กันซ้ำ
 
     let roomTypeId;
 
