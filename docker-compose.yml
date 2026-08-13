@@ -32,15 +32,15 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
-      - GGMAPI=${GGMAPI}
       - EMAIL=${EMAIL}
-      - OTPPASS=${OTPPASS}
       - BREVO_API_KEY=${BREVO_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
-      - BREVO_LOGIN=${BREVO_LOGIN}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GCP_CLIENT_EMAIL=${GCP_CLIENT_EMAIL}
       - GCP_PRIVATE_KEY=${GCP_PRIVATE_KEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     volumes:
       - ./src:/app/src
     command: npm run dev
