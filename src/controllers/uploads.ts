@@ -179,6 +179,9 @@ export async function fileUpload(
 export async function deleteFromGCS(publicUrl: string): Promise<boolean> {
   try {
     if (!publicUrl) return false;
+    if (!publicUrl.startsWith('http')) {
+      return false;
+    }
     
     const url = new URL(publicUrl);
 
