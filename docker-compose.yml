@@ -41,6 +41,8 @@ services:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GCP_CLIENT_EMAIL=${GCP_CLIENT_EMAIL}
       - GCP_PRIVATE_KEY=${GCP_PRIVATE_KEY}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+      - REDIS_URL=${REDIS_URL}
     volumes:
       - ./src:/app/src
     command: npm run dev
