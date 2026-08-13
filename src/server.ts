@@ -14,18 +14,18 @@ dotenv.config();
 const port = Number(process.env.PORT) || 3000;
 const app = express();
 
-// 1. Trust proxy if behind a load balancer (common for cloud deploys)
 app.set("trust proxy", 1);
 
-// 1.5 Helmet — ใส่ HTTP Security Headers ป้องกัน XSS, Clickjacking, MIME sniffing
 app.use(helmet());
 
-app.use(morgan("dev"));
+const isProduction = process.env.NODE_ENV === "production";
+
+app.use(morgan(isProduction ? "combined" : "dev"));
 
 // 2. CORS Configuration (MUST be before Rate Limiter to handle preflight)
 const allowedOrigins = [
   "https://huntpuk.space",
-  "https://huntpuk-8c96d.web.app",
+  "https://www.huntpuk.space",
   "capacitor://localhost",
   "http://localhost",
   "https://localhost",
@@ -34,19 +34,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-
-      // Allow local development IPs and ports (e.g. 192.168.x.x:8100 or localhost:8100)
-      if (
-        origin.startsWith("http://192.168.") ||
-        origin.startsWith("https://huntpuk-8c96d.web.app") ||
-        origin.startsWith("http://10.") ||
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("https://localhost:")
-      ) {
-        return callback(null, true);
-      }
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -56,35 +44,31 @@ app.use(
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
+    credentials: true,
   }),
 );
 
-// 3. Global Rate Limiter
 export const globalLimiter = rateLimit({
-  windowMs: 3 * 60 * 1000, // 3 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 3 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many requests from this IP, please try again later.",
+  message: "มีการส่งคำขอมากเกินไปจาก IP นี้ กรุณาลองใหม่อีกครั้งในภายหลัง",
 });
 
 app.use(globalLimiter);
 
-// 4. Body Parsers (Built-in Express) — จำกัด 100KB ป้องกัน Memory Exhaustion
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
-// 5. API Routes
 app.use("/", router);
 
-// 6. 404 Handler — ทุก route ที่ไม่มีจะ return เหมือนกันหมด ป้องกันการเดา path
 app.use((_req: Request, res: Response) => {
-  res.status(404).json({ success: false, message: "Not Found" });
+  res.status(404).json({ success: false, message: "ไม่พบหน้าเว็บ" });
 });
 
-// 7. Generic Error Handler (Prevents server crashes)
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error("Unhandled Error:", err);
+  console.error("Error:", err);
 
   if (err.code === "LIMIT_FILE_SIZE") {
     res.status(400).json({
@@ -96,27 +80,24 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
   res.status(500).json({
     success: false,
-    message: "Internal Server Error",
+    message: "เกิดข้อผิดพลาดภายในระบบ",
     error: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
 });
 
-// 7. Initialize Cron Jobs
 startMonthlyViewSummaryJob();
 
-// Connect to Redis and start server
 connectRedis()
   .then(() => {
     app.listen(port, "0.0.0.0", () => {
-      console.log(`🚀 HuntPuk API started on port ${port}`);
+      console.log(`HuntPuk API started on port ${port}`);
     });
   })
   .catch((err) => {
     console.error("Failed to connect to Redis:", err);
-    // Fallback to start server without Redis caching
     app.listen(port, "0.0.0.0", () => {
       console.log(
-        `🚀 HuntPuk API started on port ${port} (Redis disconnected)`,
+        `HuntPuk API started on port ${port} (Redis disconnected)`,
       );
     });
   });

@@ -14,13 +14,13 @@ export const verifyToken = (
 ) => {
   const token = req.headers["authorization"]?.split(" ")[1]; // รับ Token จาก Header (Bearer <token>)
 
-  if (!token) return res.status(403).json("No token provided");
+  if (!token) return res.status(403).json({ success: false, message: "กรุณาระบุ Token ยืนยันตัวตน" });
   if (!process.env.JWT_SECRET) {
-    return res.status(500).json("Internal server error");
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json("Unauthorized!");
+    if (err) return res.status(401).json({ success: false, message: "Token ไม่ถูกต้องหรือหมดอายุ" });
     req.user = decoded; // ยัดข้อมูลที่ถอดรหัสได้ (เช่น user_id) ใส่ Request
     next(); // ให้ไปทำงานที่ Controller ต่อไปได้
   });
@@ -38,7 +38,7 @@ export const verifyTokenOptional = (
   }
 
   if (!process.env.JWT_SECRET) {
-    return res.status(500).json("Internal server error");
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ" });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
@@ -52,7 +52,7 @@ export const verifyTokenOptional = (
 export const requireRole = (...roles: number[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Forbidden: insufficient permissions" });
+      return res.status(403).json({ success: false, message: "ไม่มีสิทธิ์เข้าถึงข้อมูล" });
     }
     next();
   };

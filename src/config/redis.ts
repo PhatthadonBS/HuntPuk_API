@@ -1,7 +1,7 @@
 import { createClient } from 'redis';
 
 // Connect to the redis service defined in docker-compose.yml or via ENV (e.g. Render)
-const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+const redisUrl = process.env.REDIS_URL as string;
 const redisClient = createClient({
   url: redisUrl
 });

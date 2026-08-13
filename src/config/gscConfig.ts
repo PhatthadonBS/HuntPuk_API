@@ -4,7 +4,7 @@ import path from "path";
 
 dotenv.config();
 
-const projectId = process.env.GCP_PROJECT_ID || process.env.GCS_PROJECT_ID;
+const projectId = process.env.GCP_PROJECT_ID;
 const clientEmail = process.env.GCP_CLIENT_EMAIL;
 const privateKey = process.env.GCP_PRIVATE_KEY;
 

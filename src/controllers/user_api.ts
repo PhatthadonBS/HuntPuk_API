@@ -1557,7 +1557,7 @@ export async function OTP_Sender_Reset_fn(email: string) {
 
 async function sendBrevoOTP(email: string, htmlContent: string) {
   const payload = {
-    sender: { name: "HuntPuk Team", email: "no-reply@huntpuk.space" },
+    sender: { name: "HuntPuk Team", email: "support@huntpuk.space" },
     to: [{ email: email }],
     subject: "รหัสยืนยันตัวตน (OTP) สำหรับ HuntPuk",
     htmlContent: htmlContent,

@@ -21,7 +21,7 @@ const upload = multer({
 const router = express.Router();
 
 router.get("/api", (_req, res) => {
-  res.send("HuntPuk_API is running successfully!");
+  res.redirect("https://www.huntpuk.space");
 });
 
 // View Statistics Routes
@@ -45,15 +45,17 @@ router.get(
 const strictLimiter = rateLimit({
   windowMs: 3 * 60 * 1000,
   max: 1,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "มีการส่งคำขอถี่เกินไป กรุณาลองใหม่อีกครั้งหลังจาก 3 นาที",
 });
 
-// ป้องกัน Brute-force login: 10 ครั้ง / 15 นาที ต่อ IP
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many login attempts from this IP, please try again after 15 minutes.",
+  message: "พยายามเข้าสู่ระบบมากเกินไปจาก IP นี้ กรุณาลองใหม่อีกครั้งหลังจาก 15 นาที",
 });
 
 // ป้องกัน Mail Bombing: 5 ครั้ง / 1 ชั่วโมง ต่อ IP
@@ -62,7 +64,7 @@ const mailLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many mail requests from this IP, please try again after 1 hour.",
+  message: "ส่งคำขอส่งอีเมลมากเกินไปจาก IP นี้ กรุณาลองใหม่อีกครั้งหลังจาก 1 ชั่วโมง",
 });
 
 const imgTypeUploads = upload.fields([
