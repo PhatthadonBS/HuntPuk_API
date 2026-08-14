@@ -897,6 +897,17 @@ export const createDormMB_api = async (req: Request, res: Response) => {
             [dormRoomId, room.perDay],
           );
         }
+        if (
+          room.perYear !== null &&
+          room.perYear !== undefined &&
+          room.perYear !== "" &&
+          Number(room.perYear) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 4, ?)`,
+            [dormRoomId, room.perYear],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1381,6 +1392,17 @@ export const createDorm_api = async (req: Request, res: Response) => {
           await conn.execute(
             `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
             [dormRoomId, room.perDay],
+          );
+        }
+        if (
+          room.perYear !== null &&
+          room.perYear !== undefined &&
+          room.perYear !== "" &&
+          Number(room.perYear) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 4, ?)`,
+            [dormRoomId, room.perYear],
           );
         }
       }
@@ -2931,7 +2953,9 @@ export const getAllDormMB = async (req: Request, res: Response) => {
     if (sortByPrice === "desc") {
       sql += ` ORDER BY start_price DESC, d.UPDATE_AT DESC `;
     } else {
-      sql += ` ORDER BY CASE WHEN start_price = 0 THEN 1 ELSE 0 END ASC, start_price ASC, d.UPDATE_AT DESC `;
+      
+      const startPriceExpr = `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0)`;
+      sql += ` ORDER BY CASE WHEN ${startPriceExpr} = 0 THEN 1 ELSE 0 END ASC, start_price ASC, d.UPDATE_AT DESC `;
     }
 
     const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
