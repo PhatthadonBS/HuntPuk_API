@@ -66,12 +66,7 @@ export async function processAndUploadImages(
           reject(err);
         });
 
-        blobStream.on("finish", async () => {
-          try {
-            await blob.makePublic();
-          } catch (e) {
-            // Ignore if bucket has Uniform Bucket-Level Access enabled
-          }
+        blobStream.on("finish", () => {
           const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
           urlsForField.push(publicUrl);
           resolve();
@@ -179,9 +174,6 @@ export async function fileUpload(
 export async function deleteFromGCS(publicUrl: string): Promise<boolean> {
   try {
     if (!publicUrl) return false;
-    if (!publicUrl.startsWith('http')) {
-      return false;
-    }
     
     const url = new URL(publicUrl);
 

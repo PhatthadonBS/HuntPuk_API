@@ -27,6 +27,7 @@ const allowedOrigins = [
   "https://huntpuk.space",
   "https://www.huntpuk.space",
   "capacitor://localhost",
+  "ionic://localhost",
   "http://localhost",
 ];
 
@@ -35,11 +36,14 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
+      // อนุญาตเฉพาะ production และ ionic mobile build
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      callback(new Error("Not allowed by CORS"));
+      console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
+      // ส่ง false แทน Error เพื่อไม่ให้เซิร์ฟเวอร์พ่น Error 500
+      callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Device-Id"],
