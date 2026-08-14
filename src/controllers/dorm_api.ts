@@ -2452,11 +2452,9 @@ export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
 
     const params: any[] = [];
 
-    if (status !== undefined && status !== null && status !== "") {
+    if (status !== undefined && status !== null && status !== "" && status !== 'all') {
       sql += ` AND do.REQ_STATUS = ?`;
       params.push(Number(status));
-    } else {
-      sql += ` AND do.REQ_STATUS = 0`;
     }
 
     if (search && search.toString().trim() !== "") {
