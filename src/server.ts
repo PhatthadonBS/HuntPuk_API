@@ -28,7 +28,6 @@ const allowedOrigins = [
   "https://www.huntpuk.space",
   "capacitor://localhost",
   "http://localhost",
-  "https://localhost",
 ];
 
 app.use(
