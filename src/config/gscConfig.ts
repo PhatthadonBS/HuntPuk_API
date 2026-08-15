@@ -1,37 +1,45 @@
 import { Storage } from "@google-cloud/storage";
 import dotenv from "dotenv";
+import path from "path";
 
 dotenv.config();
 
 const projectId = process.env.GCP_PROJECT_ID || process.env.GCS_PROJECT_ID;
 const clientEmail = process.env.GCP_CLIENT_EMAIL;
-const rawKey = process.env.GCP_PRIVATE_KEY || "";
+function formatPrivateKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  
+  let k = key.trim();
+  
+  // 1. Remove surrounding quotes if they exist (common in .env)
+  if (k.startsWith('"') && k.endsWith('"')) {
+    k = k.substring(1, k.length - 1);
+  } else if (k.startsWith("'") && k.endsWith("'")) {
+    k = k.substring(1, k.length - 1);
+  }
 
-/**
- * Normalize GCP private key for OpenSSL 3.x compatibility (Node 18+).
- *
- * Railway and many CI platforms store env vars differently:
- *  - .env file:       \\n  (escaped, 2 chars)
- *  - Railway UI:      may store as literal newline OR as \\n depending on how it was pasted
- *  - Some platforms:  double-escaped  \\\\n  (4 chars)
- *
- * This function unifies all cases into a proper PEM string with real newlines.
- */
-function normalizePrivateKey(key: string): string {
-  // Step 1: Remove surrounding quotes if present (e.g. "-----BEGIN...")
-  let k = key.replace(/^["']|["']$/g, "").trim();
+  // 2. Unescape newlines (replace literal "\n" and "\\n" with actual newline)
+  k = k.split("\\\\n").join("\n").split("\\n").join("\n");
+  
+  // 3. Normalize \r\n to \n
+  k = k.split("\r\n").join("\n");
 
-  // Step 2: Replace all forms of escaped newlines into real newlines
-  // Handles \\n (2-char escape), \\\\n (4-char double-escape), and \r\n
-  k = k
-    .replace(/\\\\n/g, "\n")  // double-escaped: \\n -> \n
-    .replace(/\\n/g, "\n")    // single-escaped: \n  -> real newline
-    .replace(/\r\n/g, "\n");  // normalize Windows CRLF
+  // 4. Fix cases where the key was flattened to a single line with spaces
+  if (k.includes("-----BEGIN PRIVATE KEY-----") && !k.includes("\n")) {
+    k = k.replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n");
+    k = k.replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");
+    const parts = k.split("\n");
+    if (parts.length === 3) {
+      const body = parts[1]?.replace(/\s+/g, "");
+      const formattedBody = body?.match(/.{1,64}/g)?.join("\n") || body;
+      k = `${parts[0]}\n${formattedBody}\n${parts[2]}`;
+    }
+  }
 
   return k.trim();
 }
 
-const privateKey = rawKey ? normalizePrivateKey(rawKey) : undefined;
+const privateKey = formatPrivateKey(process.env.GCP_PRIVATE_KEY);
 
 export const storage = new Storage({
   ...(projectId ? { projectId } : {}),
@@ -39,7 +47,7 @@ export const storage = new Storage({
     credentials: {
       client_email: clientEmail,
       private_key: privateKey,
-    },
+    }
   } : {}),
 });
 

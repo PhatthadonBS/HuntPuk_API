@@ -268,7 +268,24 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
 
 export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
   try {
-    const sql = `
+    const {
+      search,
+      zone,
+      minPrice,
+      maxPrice,
+      lat,
+      lng,
+      radius,
+      minScore,
+      maxWater,
+      maxWaterUnit,
+      maxWaterLump,
+      maxElect,
+    } = req.query;
+
+    const trimmedSearch = search ? search.toString().trim() : "";
+
+    let sql = `
       SELECT 
         d.DORM_ID, 
         d.DORM_NAME, 
@@ -277,17 +294,22 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.DORM_TYPE_ID,
         dt.DORM_TYPE_NAME,
         d.ADDRESS,
-        d.FRONT_DORM_IMAGE, 
+        d.FRONT_DORM_IMAGE as image, 
         d.REQ_STATUS,
-        ST_X(d.COORDINATES) AS LAT,
-        ST_Y(d.COORDINATES) AS LNG,
+        d.UPDATE_AT as update_at,
+        ST_X(d.COORDINATES) AS lat,
+        ST_Y(d.COORDINATES) AS lng,
         d.SCORE,
         d.ZONE_ID,
-        dz.ZONE_NAME,
+        dz.ZONE_NAME as zone,
         d.WATER_UNIT,
         d.WATER_LUMP,
         d.ELECT_UNIT,
         COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID = (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%' LIMIT 1) THEN rp.PRICE ELSE NULL END), 0) AS start_price,
+        (
+          COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
+          COALESCE((SELECT COUNT(LOG_ID) FROM WEB_VIEW_LOGS w WHERE w.DORM_ID = d.DORM_ID), 0)
+        ) as VIEW_COUNT,
 
         do.FIRST_NAME,
         do.LAST_NAME,
@@ -304,16 +326,91 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
       
       WHERE d.REQ_STATUS = 1
-      
-      GROUP BY d.DORM_ID
-      ORDER BY d.DORM_ID DESC
     `;
 
-    const [dorms] = await dbcon.query<RowDataPacket[]>(sql);
+    const queryParams: any[] = [];
+
+    if (trimmedSearch) {
+      sql += ` AND d.DORM_NAME LIKE ?`;
+      queryParams.push(`%${trimmedSearch}%`);
+    }
+
+    if (zone && zone !== "null" && zone !== "undefined") {
+      // Admin query uses zone Name or ID? In getAllDorms it uses zone NAME.
+      // Wait, in getAllDormMB it uses ZONE_ID if it's a number.
+      // Let's support both or just ID like getAllDormMB.
+      const zoneId = Number(zone);
+      if (!isNaN(zoneId)) {
+        sql += ` AND d.ZONE_ID = ?`;
+        queryParams.push(zoneId);
+      } else {
+        sql += ` AND dz.ZONE_NAME = ?`;
+        queryParams.push(zone);
+      }
+    }
+
+    if (minScore) {
+      sql += ` AND d.SCORE >= ?`;
+      queryParams.push(Number(minScore));
+    }
+
+    const effectiveMaxWaterUnit = maxWaterUnit || maxWater;
+    if (effectiveMaxWaterUnit) {
+      sql += ` AND (d.WATER_UNIT > 0 AND d.WATER_UNIT <= ?)`;
+      queryParams.push(Number(effectiveMaxWaterUnit));
+    }
+    if (maxWaterLump) {
+      sql += ` AND (d.WATER_LUMP > 0 AND d.WATER_LUMP <= ?)`;
+      queryParams.push(Number(maxWaterLump));
+    }
+
+    if (maxElect) {
+      sql += ` AND d.ELECT_UNIT <= ?`;
+      queryParams.push(Number(maxElect));
+    }
+
+    sql += ` GROUP BY d.DORM_ID`;
+
+    let havingClauses = [];
+    if (minPrice) {
+      havingClauses.push(`start_price >= ?`);
+      queryParams.push(Number(minPrice));
+    }
+    if (maxPrice) {
+      havingClauses.push(`start_price <= ?`);
+      queryParams.push(Number(maxPrice));
+    }
+
+    if (havingClauses.length > 0) {
+      sql += ` HAVING ` + havingClauses.join(" AND ");
+    }
+
+    sql += ` ORDER BY d.DORM_ID DESC`;
+
+    const [rows] = await dbcon.query<RowDataPacket[]>(sql, queryParams);
+
+    let finalDorms = rows;
+    if (lat && lng && radius && lat !== "null" && lng !== "null" && radius !== "null") {
+      const userLat = Number(lat);
+      const userLng = Number(lng);
+      const maxRadius = Number(radius);
+
+      finalDorms = rows.filter((dorm: any) => {
+        if (!dorm.lat || !dorm.lng) return false;
+        const distance = calculateHaversineDistance(
+          userLat,
+          userLng,
+          Number(dorm.lat),
+          Number(dorm.lng),
+        );
+        dorm.distance_from_ref = distance;
+        return distance <= maxRadius;
+      });
+    }
 
     res.json({
       success: true,
-      data: dorms,
+      data: finalDorms,
     });
   } catch (error: any) {
     console.error("Error getAllDorms_Admin_Mobile:", error);
@@ -903,6 +1000,17 @@ export const createDormMB_api = async (req: Request, res: Response) => {
             [dormRoomId, room.perDay],
           );
         }
+        if (
+          room.perYear !== null &&
+          room.perYear !== undefined &&
+          room.perYear !== "" &&
+          Number(room.perYear) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 4, ?)`,
+            [dormRoomId, room.perYear],
+          );
+        }
       }
 
       const bedTypeId = await getBedId(room.bedType);
@@ -1387,6 +1495,17 @@ export const createDorm_api = async (req: Request, res: Response) => {
           await conn.execute(
             `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 3, ?)`,
             [dormRoomId, room.perDay],
+          );
+        }
+        if (
+          room.perYear !== null &&
+          room.perYear !== undefined &&
+          room.perYear !== "" &&
+          Number(room.perYear) > 0
+        ) {
+          await conn.execute(
+            `INSERT INTO ROOM_PRICES (DORM_ROOM_ID, PRICE_TYPE_ID, PRICE) VALUES (?, 4, ?)`,
+            [dormRoomId, room.perYear],
           );
         }
       }
@@ -2336,11 +2455,9 @@ export const getAllOwnerRequests_api = async (req: Request, res: Response) => {
 
     const params: any[] = [];
 
-    if (status !== undefined && status !== null && status !== "") {
+    if (status !== undefined && status !== null && status !== "" && status !== 'all') {
       sql += ` AND do.REQ_STATUS = ?`;
       params.push(Number(status));
-    } else {
-      sql += ` AND do.REQ_STATUS = 0`;
     }
 
     if (search && search.toString().trim() !== "") {
@@ -2937,7 +3054,9 @@ export const getAllDormMB = async (req: Request, res: Response) => {
     if (sortByPrice === "desc") {
       sql += ` ORDER BY start_price DESC, d.UPDATE_AT DESC `;
     } else {
-      sql += ` ORDER BY CASE WHEN start_price = 0 THEN 1 ELSE 0 END ASC, start_price ASC, d.UPDATE_AT DESC `;
+      
+      const startPriceExpr = `COALESCE(MIN(CASE WHEN rp.PRICE_TYPE_ID IN (SELECT PRICE_TYPE_ID FROM PRICE_TYPES WHERE PRICE_TYPE_NAME LIKE '%เดือน%') AND rp.PRICE > 0 THEN rp.PRICE END), 0)`;
+      sql += ` ORDER BY CASE WHEN ${startPriceExpr} = 0 THEN 1 ELSE 0 END ASC, start_price ASC, d.UPDATE_AT DESC `;
     }
 
     const [dorms] = await dbcon.query<DormSummary[]>(sql, params);
