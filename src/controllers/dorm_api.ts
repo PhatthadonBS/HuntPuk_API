@@ -220,6 +220,8 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
         d.DORM_NAME, 
         d.DORM_STATUS_ID,
         ds.DORM_STATUS_NAME,
+        d.DORM_TYPE_ID,
+        dt.DORM_TYPE_NAME,
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         ST_X(d.COORDINATES) AS LAT,
@@ -237,6 +239,7 @@ export const getAllDorms_Admin = async (req: Request, res: Response) => {
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
       LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+      LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
@@ -271,6 +274,8 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.DORM_NAME, 
         d.DORM_STATUS_ID,
         ds.DORM_STATUS_NAME,
+        d.DORM_TYPE_ID,
+        dt.DORM_TYPE_NAME,
         d.ADDRESS,
         d.FRONT_DORM_IMAGE, 
         d.REQ_STATUS,
@@ -293,6 +298,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
       LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
       LEFT JOIN USERS u ON do.USER_ID = u.USER_ID
       LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
+      LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
       LEFT JOIN DORM_ZONES dz ON d.ZONE_ID = dz.ZONE_ID
       LEFT JOIN DORM_ROOMS dr ON d.DORM_ID = dr.DORM_ID
       LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
