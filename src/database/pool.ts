@@ -5,7 +5,7 @@ dotenv.config();
 export const dbcon = mysql.createPool({
   host: process.env.DB_HOST || 'localhost', 
   user: process.env.DB_USER || 'root',     
-  password: process.env.DB_PASSWORD ? decodeURIComponent(process.env.DB_PASSWORD) : '',  
+  password: process.env.DB_PASSWORD || '',  
   database: process.env.DB_NAME || 'huntpuk_db',
   port: Number(process.env.DB_PORT) || 3306,
   waitForConnections: true,
