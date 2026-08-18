@@ -44,7 +44,7 @@ router.get(
 
 const strictLimiter = rateLimit({
   windowMs: 3 * 60 * 1000,
-  max: 1,
+  max: 3,
   standardHeaders: true,
   legacyHeaders: false,
   message: "มีการส่งคำขอถี่เกินไป กรุณาลองใหม่อีกครั้งหลังจาก 3 นาที",
