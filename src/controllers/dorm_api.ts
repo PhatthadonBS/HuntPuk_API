@@ -294,7 +294,7 @@ export const getAllDorms_Admin_Mobile = async (req: Request, res: Response) => {
         d.DORM_TYPE_ID,
         dt.DORM_TYPE_NAME,
         d.ADDRESS,
-        d.FRONT_DORM_IMAGE,
+        d.FRONT_DORM_IMAGE as image,
         d.REQ_STATUS,
         d.UPDATE_AT as update_at,
         ST_X(d.COORDINATES) AS lat,
