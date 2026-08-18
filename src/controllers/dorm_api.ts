@@ -48,7 +48,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     const trimmedSearch = search ? search.toString().trim() : "";
 
-    // โครงสร้างคำสั่ง SQL ดึงข้อมูลพื้นฐานหอพักตามขอบเขตความต้องการ
+  
     let sql = `
             SELECT 
                 d.DORM_ID, 
@@ -657,7 +657,7 @@ export const addFacility_api = async (req: Request, res: Response) => {
     }
 
     const userData = userRows[0] as {ROLE_TYPE_ID?: number, USERNAME?: string, USER_ID?: number};
-    const isAdmin = userData["ROLE_TYPE_ID"] !== 1;
+    const isAdmin = userData["ROLE_TYPE_ID"] == 3;
     if (isAdmin) {
       usernameString = "admin";
     } else {
