@@ -249,7 +249,7 @@ export const login = async (req: Request, res: Response) => {
     if (user[0]?.ACCOUNT_STATUS != 0) {
       return res
         .status(400)
-        .json({ message: "บัญชีผู้ใช้นี้ถูกระงับการใช้งาน" });
+        .json({ message: user[0]?.ACCOUNT_STATUS == 1 ? "บัญชีผู้ใช้นี้ถูกปิดการใช้งาน" : "บัญชีผู้ใช้นี้ถูกระงับการใช้งาน" });
     }
 
     const isMatch = await bcrypt.compare(

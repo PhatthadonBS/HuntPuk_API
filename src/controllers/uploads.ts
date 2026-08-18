@@ -1,23 +1,15 @@
 import { storage, bucketName } from "../config/gscConfig";
 import sharp from "sharp";
-import { MulterFiles } from "./dorm_api"; // Ensure this is exported from dorm_api or models
+import { MulterFiles } from "./dorm_api"; 
 
-/**
- * Validates, optimizes, and uploads multiple files to GCS.
- * 
- * @param files The req.files object from Multer.
- * @param mainFolder "dorms" or "users"
- * @param folderName Typically the dormId_ownerId or username_userId
- * @param expectedFields An array of field names expected in this upload
- * @returns A mapping of field names to their public GCS URLs. 
- *          Single files return a string. Multiple files (e.g. OTHER_IMG) return string[].
- */
+//upload image to google cloud storage
 export async function processAndUploadImages(
   files: MulterFiles,
   dormId: number,
   ownerId: number
 ): Promise<Record<string, string | string[]>> {
   
+  //check validate file type
   const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml", "application/octet-stream"];
   const uploadedUrls: Record<string, string | string[]> = {};
   
@@ -25,6 +17,7 @@ export async function processAndUploadImages(
   const basePath = `dorms/${dormId}_u${ownerId}`;
   const bucket = storage.bucket(bucketName);
 
+  //loop each file
   for (const [fieldname, fileArray] of Object.entries(files)) {
     if (!fileArray || fileArray.length === 0) continue;
 

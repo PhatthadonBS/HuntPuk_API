@@ -4,7 +4,9 @@ import { RowDataPacket } from "mysql2";
 
 export const getDashboardStats_api = async (req: Request, res: Response) => {
   try {
-    // 1. Dorm Count (Only approved and not deleted)
+    // 1. Dorm Count (Only approved and not deleted) 
+    // req status 0 = waiting, 1 = approved, 2 = pending, 3 = rejected
+    // dorm status 1 = available, 2 = renovation, 3 = full, 4 = deleted
     const [dormCountResult] = await dbcon.execute<RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM DORMITORIES WHERE REQ_STATUS = 1 AND DORM_STATUS_ID != 4"
     );
@@ -40,9 +42,17 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
       WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID != 4
       ORDER BY views DESC
     `);
+
+    // all dorm data 
     const allDormViews = popularDormResult || [];
+
+    // top 5 popular dorms
     const topPopularDorms = allDormViews.slice(0, 5);
+
+    // popular dorm (top 1)
     const popularDorm = topPopularDorms[0] || { dormName: "N/A", views: 0 };
+
+    // total view count of all dorms
     const totalDormViews = allDormViews.reduce((sum: number, dorm: any) => sum + Number(dorm.views), 0);
 
 
@@ -53,6 +63,7 @@ export const getDashboardStats_api = async (req: Request, res: Response) => {
     );
     const historicalViews = Number(historicalViewsResult[0]?.count) || 0;
 
+    // all dorm with null dorm_id
     const [currentViewsResult] = await dbcon.execute<RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM WEB_VIEW_LOGS"
     );

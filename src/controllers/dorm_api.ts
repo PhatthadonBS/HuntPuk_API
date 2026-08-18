@@ -3,25 +3,17 @@ import { Request, Response } from "express";
 import { dbcon } from "../database/pool";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import {
-  deleteFolder,
   deleteFromGCS,
   fileUpload,
   processAndUploadImages,
 } from "./uploads";
-import { getUser, getUsers_fn, resMailSender_fn } from "./user_api";
+import { getUsers_fn, resMailSender_fn } from "./user_api";
 import { PoolConnection } from "mysql2/promise";
 import {
-  DormRegPostReq,
-  DormRoomImgTypeGetRes,
-  DormRoomTypeReqPostReq,
-  RoomTypeItem,
   DormDataGetRes,
   FacOfDormGetRes,
   DormSummary,
-  DormAllGetRes,
-  DormDetailGetRes,
 } from "../models/dorm.model";
-import { User } from "../models/user.model";
 import { clearCache } from "../middlewares/cache";
 
 export type MulterFiles = {
@@ -79,25 +71,25 @@ export const getAllDorms = async (req: Request, res: Response) => {
 
     const queryParams: any[] = [];
 
-    // 🔍 1. ค้นหาด้วยชื่อหอพัก
+    // 1. ค้นหาด้วยชื่อหอพัก
     if (trimmedSearch) {
       sql += ` AND d.DORM_NAME LIKE ?`;
       queryParams.push(`%${trimmedSearch}%`);
     }
 
-    // 🗺️ 2. ค้นหาด้วยโซนของหอพัก
+    // 2. ค้นหาด้วยโซนของหอพัก
     if (zone) {
       sql += ` AND z.ZONE_NAME = ?`;
       queryParams.push(zone);
     }
 
-    // ⭐ 3. ค้นหาด้วยคะแนนรีวิวขั้นต่ำ (เช่น หอพักที่มีคะแนน >= 4 ดาว)
+    // 3. ค้นหาด้วยคะแนนรีวิวขั้นต่ำ (เช่น หอพักที่มีคะแนน >= 4 ดาว)
     if (minScore) {
       sql += ` AND d.SCORE >= ?`;
       queryParams.push(Number(minScore));
     }
 
-    // 💧 4. ค้นหาด้วยค่าน้ำ - แยกแบบรายหน่วย / แบบเหมา
+    // 4. ค้นหาด้วยค่าน้ำ - แยกแบบรายหน่วย / แบบเหมา
     const effectiveMaxWaterUnit = maxWaterUnit || maxWater; // backward compat
     if (effectiveMaxWaterUnit) {
       sql += ` AND (d.WATER_UNIT > 0 AND d.WATER_UNIT <= ?)`;
@@ -117,7 +109,7 @@ export const getAllDorms = async (req: Request, res: Response) => {
     // จัดกลุ่มข้อมูลเนื่องจากมีการใช้ Aggregate Function (MIN)
     sql += ` GROUP BY d.DORM_ID`;
 
-    // 💰 6. ค้นหาด้วยช่วงราคาเช่าเริ่มต้นต่อเดือน (ต้องเช็คใน HAVING เพราะเป็นผลรวมย่อย)
+    // 6. ค้นหาด้วยช่วงราคาเช่าเริ่มต้นต่อเดือน (ต้องเช็คใน HAVING เพราะเป็นผลรวมย่อย)
     let havingClauses = [];
     if (minPrice) {
       havingClauses.push(`start_price >= ?`);
@@ -1855,8 +1847,7 @@ export const updateRoomTypes_fn = async (
   }
 
   if (!roomTypes || roomTypes.length === 0) return;
-
-  // 🌟 1. ล้างข้อมูลเก่าแบบ 100% (แก้บั๊ก Error 500: ทยอยลบจากลูกไปหาแม่ ปลอดภัยชัวร์!)
+  
   await conn.execute(
     `
     DELETE rp FROM ROOM_PRICES rp 
