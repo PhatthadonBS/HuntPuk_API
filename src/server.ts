@@ -26,7 +26,9 @@ app.use(morgan(isProduction ? "combined" : "dev"));
 const allowedOrigins = [
   "https://huntpuk.space",
   "https://www.huntpuk.space",
-  "https://localhost",
+  "http://localhost:4200",
+  "http://localhost",
+
 ];
 
 app.use(

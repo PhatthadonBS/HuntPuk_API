@@ -2493,6 +2493,8 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
                   d.DORM_NAME, 
                   d.ADDRESS,
                   d.SCORE,
+                  d.DORM_OWNER_ID,
+                  do.USER_ID,
                   d.FRONT_DORM_IMAGE as image, 
                   (
                     COALESCE((SELECT SUM(VIEW_COUNT) FROM STATISTIC_WEB_VIEW s WHERE s.DORM_ID = d.DORM_ID), 0) + 
@@ -2518,14 +2520,15 @@ export const getPopularDorms_api = async (req: Request, res: Response) => {
               LEFT JOIN ROOM_PRICES rp ON dr.DORM_ROOM_ID = rp.DORM_ROOM_ID
               LEFT JOIN DORM_STATUSES ds ON d.DORM_STATUS_ID = ds.DORM_STATUS_ID
               LEFT JOIN DORM_TYPES dt ON d.DORM_TYPE_ID = dt.DORM_TYPE_ID
+              LEFT JOIN DORM_OWNERS do ON d.DORM_OWNER_ID = do.DORM_OWNER_ID
               WHERE d.REQ_STATUS = 1 AND d.DORM_STATUS_ID IN (1, 3)
-              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.FRONT_DORM_IMAGE, d.UPDATE_AT, d.ZONE_ID, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT
+              GROUP BY d.DORM_ID, d.DORM_NAME, d.ADDRESS, d.SCORE, d.DORM_OWNER_ID, d.FRONT_DORM_IMAGE, d.UPDATE_AT, d.ZONE_ID, dz.ZONE_NAME, d.COORDINATES, d.DORM_STATUS_ID, ds.DORM_STATUS_NAME, d.DORM_TYPE_ID, dt.DORM_TYPE_NAME, d.WATER_UNIT, d.WATER_LUMP, d.ELECT_UNIT
               ${orderClause}
               LIMIT ?
     `;
 
     const [dorms] = await dbcon.query<RowDataPacket[]>(sql, [limit]);
-
+    console.log("dorms", dorms);
     res.json({
       success: true,
       count: dorms.length,
